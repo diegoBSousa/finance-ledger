@@ -20,6 +20,7 @@
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
+        "nikic/php-parser": "^5.0",
         "nunomaduro/collision": "^8.6",
         "phpunit/phpunit": "^12.5.12"
     },
@@ -39,7 +40,9 @@
         "lint": "pint --test",
         "format": "pint",
         "analyse": "phpstan analyse --memory-limit=512M",
-        "test": "@php vendor/bin/phpunit",
+        "test": ["@test:core", "@test:feature"],
+        "test:core": "@php vendor/bin/phpunit --configuration phpunit.core.xml",
+        "test:feature": "@php vendor/bin/phpunit --configuration phpunit.xml",
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
