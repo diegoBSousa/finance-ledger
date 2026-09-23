@@ -1,0 +1,10 @@
+{
+  "fields": [
+    "2026-08-16",
+    "Servi\u00e7o A/B \"especial\"\nandar\u2028fim #682",
+    "1",
+    "Receita"
+  ],
+  "canonical_record": "[\"csv-row-v1\",\"BRL\",\"2026-08-16\",\"Servi\u00e7o A/B \\\"especial\\\"\\nandar\\u2028fim\",\"1\",\"income\",\"682\"]",
+  "sha256": "be65543c05f31053868ba8ce784051a9f100ff97801c074284009739c291f056"
+}

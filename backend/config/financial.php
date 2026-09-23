@@ -1,9 +1,12 @@
 <?php
 
-// These are future application limits, not upload or pagination endpoints yet.
+use App\Application\Pagination\PageRequest;
+use App\Domain\Shared\Currency;
+
+// HTTP upload/pagination endpoints are introduced in later increments.
 return [
-    'currency' => 'BRL',
+    'currency' => Currency::BRL->value,
     'max_upload_bytes' => 100000000,
-    'default_page_size' => 10,
-    'max_page_size' => 10,
+    'default_page_size' => PageRequest::MAX_PER_PAGE,
+    'max_page_size' => PageRequest::MAX_PER_PAGE,
 ];

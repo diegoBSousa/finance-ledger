@@ -1,10 +1,10 @@
 # Arquitetura e fronteiras
 
-A primeira entrega contém apenas a composição técnica e a prova de comunicação HTTP. As camadas de domínio e aplicação serão criadas no próximo incremento, junto de seus primeiros comportamentos e testes.
+A etapa 02 acrescenta as camadas de domínio e aplicação à composição técnica inicial. A preparação de um lançamento já pode ser executada sem Laravel; a persistência financeira entra no próximo incremento.
 
 ## Direção das dependências
 
-| Camada planejada | Conteúdo | Pode depender de |
+| Camada | Conteúdo | Pode depender de |
 | --- | --- | --- |
 | `Domain` | Money, contas, lados, lançamentos e invariantes | PHP e tipos próprios |
 | `Application` | DTOs, casos de uso e portas de persistência | Domain e tipos próprios |
@@ -13,7 +13,21 @@ A primeira entrega contém apenas a composição técnica e a prova de comunica�
 
 Controllers de negócio fazem validação de transporte, constroem RequestDTOs e chamam casos de uso injetados. Os casos de uso retornam ResponseDTOs próprios. Nenhum contrato interno recebe `Request`, `UploadedFile`, `Model`, `Collection`, `Paginator`, `Carbon` ou tipos da biblioteca JWT.
 
-Records Eloquent terão mapeamento explícito para DTOs de dados. DTOs de leitura HTTP não devem passar a ser responsabilidade das entidades de domínio. Inserções em lote terão adapters próprios e não dependerão de eventos individuais dos models.
+`Account`, `Posting` e `JournalEntry` implementam `toData()` retornando DTOs imutáveis de `Domain/Accounting/Data`. Assim, as entidades não dependem da camada Application nem de um formato HTTP. O caso de uso envolve `JournalEntryData` em seu próprio ResponseDTO. Os futuros records Eloquent também terão mapeamento explícito para DTOs próprios; os repositórios não expõem entidades ou models.
+
+Inserções em lote terão adapters próprios e não dependerão de eventos individuais dos models.
+
+## Fluxo implementado
+
+`PrepareCsvPostingRequest` contém o ator confiável e os quatro campos já interpretados de uma linha CSV. `PrepareCsvPostingUseCase` canonicaliza a linha, pede a conta financeira ao `AccountRepository`, confere a titularidade, resolve a conta técnica e constrói o agregado balanceado. A resposta contém dados próprios: hash, texto canônico, descrição original para auditoria e `JournalEntryData` com duas partidas.
+
+O caso de uso não grava operações, publica eventos ou reserva hashes. Na etapa de persistência, a unicidade precisa ser garantida pela restrição MySQL e pela mesma transação que confirma a operação. O hash calculado aqui, sozinho, não oferece idempotência transacional.
+
+`AccountRepository` é somente uma porta de leitura. Seu double está em `tests/Doubles`, e não é registrado no container Laravel. O teste abstrato `AccountRepositoryContract` define as expectativas que serão reutilizadas pelo adapter MySQL.
+
+`phpunit.core.xml` usa um bootstrap que bloqueia o autoload de Laravel, Carbon e adapters. `ArchitectureTest` inspeciona nomes resolvidos na árvore de sintaxe e permite apenas dependências internas na direção correta e recursos nativos do PHP. Também verifica que as assinaturas do repositório expõem escalares, enums e DTOs readonly. O parser utilizado nessa verificação é uma dependência exclusiva de desenvolvimento.
+
+BRL é a única moeda representável pelo enum `Currency`; códigos não suportados são rejeitados na conversão dos dados. Adicionar moedas exige rever as invariantes de aritmética e de balanceamento por moeda antes de ampliar esse enum.
 
 `HealthController` é uma verificação operacional sem entrada ou comportamento de negócio; não cria um caso de uso fictício. `CheckInfrastructure` e `ProbeSharedUploadJob` também pertencem à borda técnica. Não servem como modelo para transportar classes Laravel pelas futuras interfaces de domínio/aplicação.
 
