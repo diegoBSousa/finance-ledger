@@ -21,7 +21,7 @@ final readonly class PrepareImportUseCase
         }
         try {
             $validated = $this->files->validate($source->file);
-            $this->imports->complete($request->deliveryId, $source, $validated->headerOffset);
+            $this->imports->complete($request->deliveryId, $source, $validated->headerOffset, $validated->blockHashes);
 
             return new PrepareImportResponse(true);
         } catch (InvalidImportFile $error) {

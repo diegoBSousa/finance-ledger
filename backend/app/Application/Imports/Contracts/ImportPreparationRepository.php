@@ -12,7 +12,8 @@ interface ImportPreparationRepository
     public function claim(string $deliveryId): ?ImportSourceData;
 
     /** Atomically advance the header checkpoint, enqueue the first chunk and acknowledge preparation. */
-    public function complete(string $deliveryId, ImportSourceData $source, int $headerOffset): void;
+    /** @param list<string> $blockHashes */
+    public function complete(string $deliveryId, ImportSourceData $source, int $headerOffset, array $blockHashes = []): void;
 
     public function reject(string $deliveryId, ImportSourceData $source, string $errorCode): void;
 

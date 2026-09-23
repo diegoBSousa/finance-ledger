@@ -62,9 +62,9 @@ final class MysqlImportPreparationRepository implements ImportPreparationReposit
         }
     }
 
-    public function complete(string $deliveryId, ImportSourceData $source, int $headerOffset): void
+    public function complete(string $deliveryId, ImportSourceData $source, int $headerOffset, array $blockHashes = []): void
     {
-        $this->finish($deliveryId, $source, $headerOffset, null);
+        $this->finish($deliveryId, $source, $headerOffset, null, $blockHashes);
     }
 
     public function reject(string $deliveryId, ImportSourceData $source, string $errorCode): void
@@ -72,11 +72,12 @@ final class MysqlImportPreparationRepository implements ImportPreparationReposit
         $this->finish($deliveryId, $source, 0, $errorCode);
     }
 
-    private function finish(string $deliveryId, ImportSourceData $source, int $offset, ?string $error): void
+    /** @param list<string> $blockHashes */
+    private function finish(string $deliveryId, ImportSourceData $source, int $offset, ?string $error, array $blockHashes = []): void
     {
         $this->requireOwnTransaction();
         try {
-            DB::transaction(function () use ($deliveryId, $source, $offset, $error): void {
+            DB::transaction(function () use ($deliveryId, $source, $offset, $error, $blockHashes): void {
                 $delivery = DB::table('outbox_deliveries')->where('id', $deliveryId)->lockForUpdate()->first();
                 if ($delivery === null || $delivery->consumer !== 'import-preparer'
                     || ! DB::table('outbox_events')->where('id', $delivery->event_id)
@@ -94,7 +95,8 @@ final class MysqlImportPreparationRepository implements ImportPreparationReposit
                 }
                 $changes = ['lease_token' => null, 'lease_expires_at' => null, 'heartbeat_at' => DB::raw('CURRENT_TIMESTAMP(6)'), 'updated_at' => DB::raw('CURRENT_TIMESTAMP(6)')];
                 if ($error === null) {
-                    $changes += ['prepared_at' => DB::raw('CURRENT_TIMESTAMP(6)'), 'byte_offset' => $offset, 'last_record_number' => 1];
+                    $changes += ['prepared_at' => DB::raw('CURRENT_TIMESTAMP(6)'), 'byte_offset' => $offset, 'last_record_number' => 1,
+                        'file_block_hashes' => $blockHashes === [] ? null : json_encode($blockHashes, JSON_THROW_ON_ERROR)];
                     $event = DB::table('outbox_events')->insertGetId([
                         'event_type' => 'ImportChunkRequested', 'event_version' => 1,
                         'payload' => json_encode(['import_id' => $source->import->id, 'checkpoint_version' => '0'], JSON_THROW_ON_ERROR),

@@ -30,4 +30,4 @@ Este documento registra requisitos; não afirma que já foram implementados nest
 | Soma dos débitos e soma dos créditos | 6.282.915.548 em cada lado |
 | Saldo final da conta #682 em centavos | 109.209 |
 
-Esses números vieram da análise do arquivo durante o planejamento. Ainda não são resultados obtidos pela aplicação desta entrega.
+Esses números vieram da análise do arquivo durante o planejamento e foram confirmados pela importação integral na etapa 08. O teste também reenviou o CSV e verificou que nenhuma operação financeira foi repetida. Evidências e limites da validação estão em [step-08.md](step-08.md).

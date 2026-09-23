@@ -59,6 +59,8 @@ docker compose up -d --wait --wait-timeout 180 mysql redis
 docker compose run --rm --no-deps app php artisan migrate --force
 docker compose run --rm --no-deps app php artisan db:seed --force
 docker compose up -d --wait --wait-timeout 120
+# Bind-mounted PHP changes do not necessarily recreate containers; reload long-lived processes.
+docker compose restart worker outbox-relay balance-projector
 bash scripts/smoke.sh
 
 echo 'Ready: frontend http://localhost:5173 | API http://localhost:8080/api/v1/health (default ports).'
