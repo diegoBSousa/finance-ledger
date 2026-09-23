@@ -21,7 +21,7 @@ final class SchemaMigrationTest extends TestCase
             self::assertFalse(Schema::hasTable('accounts'));
             self::assertFalse(Schema::hasTable('ledger_entries'));
             self::assertSame(0, Artisan::call('migrate', ['--force' => true]));
-            foreach (['accounts', 'account_balances', 'financial_states', 'journal_entries', 'ledger_entries', 'imports', 'import_rows', 'outbox_events', 'outbox_deliveries'] as $table) {
+            foreach (['accounts', 'account_balances', 'financial_states', 'journal_entries', 'ledger_entries', 'imports', 'import_rows', 'outbox_events', 'outbox_deliveries', 'revoked_tokens'] as $table) {
                 self::assertTrue(Schema::hasTable($table), $table);
             }
         } finally {

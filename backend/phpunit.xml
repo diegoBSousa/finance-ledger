@@ -12,10 +12,21 @@
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_DEBUG" value="false" force="true"/>
         <env name="APP_KEY" value="base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" force="true"/>
+        <env name="JWT_SECRET" value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" force="true"/>
         <env name="CACHE_STORE" value="array" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync" force="true"/>
         <env name="SESSION_DRIVER" value="array" force="true"/>
         <env name="MAIL_MAILER" value="array" force="true"/>
-        <env name="LOG_CHANNEL" value="null" force="true"/>
+        <env name="LOG_CHANNEL" value="&quot;null&quot;" force="true"/>
+        <!-- Docker also populates $_SERVER, which Laravel reads before $_ENV/getenv(). -->
+        <server name="APP_ENV" value="testing"/>
+        <server name="APP_DEBUG" value="false"/>
+        <server name="APP_KEY" value="base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="/>
+        <server name="JWT_SECRET" value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="/>
+        <server name="CACHE_STORE" value="array"/>
+        <server name="QUEUE_CONNECTION" value="sync"/>
+        <server name="SESSION_DRIVER" value="array"/>
+        <server name="MAIL_MAILER" value="array"/>
+        <server name="LOG_CHANNEL" value="&quot;null&quot;"/>
     </php>
 </phpunit>
