@@ -1,6 +1,6 @@
 # Arquitetura e fronteiras
 
-A etapa 04 acrescenta autenticação à API sobre o modelo persistente. O núcleo contábil e os casos de uso de autenticação continuam testáveis sem Laravel. A gravação de operações financeiras entra no próximo incremento.
+A etapa 05 acrescenta postagem atômica, invalidação transacional e imutabilidade do livro. O núcleo contábil e os casos de uso continuam testáveis sem Laravel; os adapters MySQL implementam locks, transações e outbox.
 
 ## Direção das dependências
 
@@ -21,19 +21,27 @@ Inserções em lote terão adapters próprios e não dependerão de eventos indi
 
 `PrepareCsvPostingRequest` contém o ator confiável e os quatro campos já interpretados de uma linha CSV. `PrepareCsvPostingUseCase` canonicaliza a linha, pede a conta financeira ao `AccountRepository`, confere a titularidade, resolve a conta técnica e constrói o agregado balanceado. A resposta contém dados próprios: hash, texto canônico, descrição original para auditoria e `JournalEntryData` com duas partidas.
 
-O caso de uso não grava operações, publica eventos ou reserva hashes. Já existe `UNIQUE(owner_user_id, source_row_hash)` no MySQL. A etapa de postagem usará essa restrição na mesma transação que confirma cabeçalho, partidas e evento. O hash calculado sozinho não oferece idempotência transacional.
+`PrepareCsvPostingUseCase` continua somente preparando dados. `PostCsvBatchUseCase` o reutiliza e envia `PostingBatchData` à porta `JournalRepository`. O adapter MySQL revalida o agregado com contas bloqueadas, confirma operações novas e grava o evento `LedgerChanged` e sua entrega pendente na mesma transação. `UNIQUE(owner_user_id, source_row_hash)` complementa o lock do titular; a resposta mantém a ordem das linhas e o ID original das duplicatas. O hash sozinho não oferece idempotência transacional.
 
 `AccountRepository` é somente uma porta de leitura. Seu double está em `tests/Doubles`; `MysqlAccountRepository` é a implementação registrada no container Laravel. Ambos herdam os mesmos testes de `AccountRepositoryContract`. Nenhuma interface foi ampliada para acomodar métodos de Eloquent.
 
 `AccountProvisioner` é uma operação de infraestrutura utilizada pelos seeds. Em uma transação, verifica o usuário, serializa o provisionamento daquele titular e cria estado, conta e projeção. Não é um caso de uso HTTP nem permite criar implicitamente contas durante a importação. Um futuro fluxo de criação de conta terá seu próprio caso de uso/contrato quando existir essa necessidade.
 
-As migrations são específicas de MySQL 8.4/InnoDB. FKs compostas preservam proprietário/moeda entre cabeçalho, partidas e contas. CHECKs validam valores e estados de uma linha; o balanceamento do agregado continua no domínio e será persistido atomicamente. Não há trigger de invalidação nesta etapa. O schema completo e os limites estão em [step-03.md](step-03.md).
+As migrations são específicas de MySQL 8.4/InnoDB. FKs compostas preservam proprietário/moeda entre cabeçalho, partidas e contas. CHECKs validam valores e estados de uma linha; o balanceamento do agregado continua no domínio e será persistido atomicamente. O trigger `AFTER INSERT` avança revisão/versão e marca `staled` para cada partida. Quatro triggers bloqueiam UPDATE/DELETE dos registros contábeis. O schema original está em [step-03.md](step-03.md), e o protocolo de postagem/limites está em [step-05.md](step-05.md).
 
 `phpunit.core.xml` usa um bootstrap que bloqueia o autoload de Laravel, Carbon e adapters. `ArchitectureTest` inspeciona nomes resolvidos na árvore de sintaxe e permite apenas dependências internas na direção correta e recursos nativos do PHP. Também verifica que as assinaturas do repositório expõem escalares, enums e DTOs readonly. O parser utilizado nessa verificação é uma dependência exclusiva de desenvolvimento.
 
 BRL é a única moeda representável pelo enum `Currency`; códigos não suportados são rejeitados na conversão dos dados. Adicionar moedas exige rever as invariantes de aritmética e de balanceamento por moeda antes de ampliar esse enum.
 
 `HealthController` é uma verificação operacional sem entrada ou comportamento de negócio; não cria um caso de uso fictício. `CheckInfrastructure` e `ProbeSharedUploadJob` também pertencem à borda técnica. Não servem como modelo para transportar classes Laravel pelas futuras interfaces de domínio/aplicação.
+
+## Postagem e concorrência
+
+Cada lote tem um titular autenticado e até 500 operações. O escritor bloqueia o estado do titular, as projeções por ID crescente e as contas nessa mesma ordem. As contas são revalidadas sob lock para impedir que uma preparação antiga use uma conta desativada. O recálculo futuro bloqueará projeções, sem pedir depois o lock do titular.
+
+A deduplicação usa leitura bloqueante atual, inclusive dentro de uma transação externa com snapshot anterior. Novas operações produzem duas partidas; duplicatas não produzem invalidação ou eventos. O trigger apenas mantém metadados: agregações e publicação Redis ficam fora dele. Uma falha em qualquer escrita desfaz o lote e os efeitos dos triggers.
+
+As conexões MySQL limitam a espera InnoDB a 5 segundos. O adapter tenta até três vezes quando gerencia a transação externa; se for chamado dentro da transação de um futuro importador, o chamador precisa desfazer e retentar o lote externo após uma falha de concorrência. O retorno do repositório só é durável depois do commit externo.
 
 ## Autenticação
 

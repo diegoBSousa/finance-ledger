@@ -1,9 +1,16 @@
-# Finance Ledger — etapa 04
+# Finance Ledger — etapa 05
 
-Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão acrescenta autenticação JWT à API e revogação persistida no MySQL.
+Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão acrescenta a gravação atômica dos lançamentos, idempotência concorrente, imutabilidade do livro e invalidação dos saldos.
 
 ## Implementado até esta etapa
 
+- Caso de uso de postagem de lotes internos com até 500 operações, usando DTOs e a porta de persistência do journal.
+- Cabeçalhos, duas partidas por operação nova e um evento durável por lote confirmados na mesma transação MySQL.
+- Duplicatas preservam o ID original; reenvios parciais/sobrepostos não repetem partidas, versões ou eventos.
+- Locks por titular e contas em ordem determinística, revalidação das contas antes da escrita e limite de espera de 5 segundos.
+- Trigger por nova partida incrementa a revisão do titular e a versão da conta, marcando seu saldo como desatualizado.
+- Triggers bloqueiam UPDATE/DELETE do journal e das partidas; posições 1/2 impedem adicionar uma terceira partida à operação completa.
+- Testes reais com dois processos/conexões MySQL, lotes sobrepostos, rollback e limite de 500 operações.
 - `POST /api/v1/auth/login`, `GET /api/v1/auth/me` e `POST /api/v1/auth/logout`, com controllers pequenos, DTOs, casos de uso e presenters explícitos.
 - JWT HS256 de 15 minutos com chave própria, validação de assinatura, emissor, audiência, identidade e datas; biblioteca `lcobucci/jwt` travada no lockfile.
 - Argon2id, rehash de parâmetros antigos e resposta uniforme para e-mail inexistente/senha incorreta; limite de 5 tentativas por e-mail/IP e 30 por IP a cada minuto.
@@ -32,7 +39,7 @@ Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 
 - PHPUnit, Larastan/PHPStan, Pint, Vitest, Vue Test Utils, ESLint, checagem TypeScript e workflow de CI.
 - Diagnóstico real de infraestrutura: consulta MySQL, publica um job Redis e confere se o worker leu o arquivo privado escrito pela aplicação.
 
-O caso de uso contábil **prepara e valida** o lançamento usando contas reais do MySQL; ainda não grava operações financeiras. A autenticação está disponível na API. As estruturas de saldo, importação e outbox existem, mas seus serviços ainda não foram implementados. Endpoints financeiros, postagem transacional, trigger de `staled`, recálculo, importador, dashboard e processos financeiros independentes entram nas próximas etapas. O `actorUserId` vem do contexto autenticado/confiável, nunca de um ID livre enviado pelo cliente. A SPA mantém a tela operacional; sua interface de login será implementada com o frontend de negócio.
+O caso de uso `PostCsvBatchUseCase` já grava operações financeiras por meio de `MysqlJournalRepository`, usando as contas existentes. A autenticação está disponível na API. O saldo é marcado como `staled` pelo trigger, e o evento `LedgerChanged` fica pendente na outbox. Recálculo, endpoints financeiros, importador de arquivos, relay, consumidor de cache, dashboard e processos financeiros independentes entram nas próximas etapas. O `actorUserId` vem do contexto autenticado/confiável, nunca de um ID livre enviado pelo cliente. A SPA mantém a tela operacional; sua interface de login será implementada com o frontend de negócio.
 
 O endpoint operacional público não expõe dados de negócio. O limite exato de 100.000.000 bytes será validado no futuro caso de uso de upload; PHP/Nginx já têm os limites de transporte. A paginação está validada no DTO, e será conectada aos endpoints nas etapas correspondentes.
 
@@ -51,6 +58,8 @@ bash scripts/check.sh
 O bootstrap gera `.env` com chaves independentes para aplicação/JWT e senhas aleatórias, usa seu UID/GID para os arquivos, instala as versões dos lockfiles, inicia MySQL/Redis, aplica as migrations, executa o seed e inicia os serviços. Por fim, executa o diagnóstico de fila e volume. Ao executar novamente, preserva configurações e volumes existentes e acrescenta as variáveis de demonstração/JWT se estiverem ausentes.
 
 As 900 contas financeiras pertencem ao usuário definido por `DEMO_USER_EMAIL` (padrão `demo@example.test`). A senha inicial fica em `DEMO_USER_PASSWORD`, gerada pelo bootstrap. O seed usa Argon2id e não troca senhas de usuários existentes. Funciona somente em `local`/`testing`; se uma conta do intervalo já pertencer a outra pessoa, aborta e desfaz o seed inteiro. O CSV ainda não é importado e os saldos iniciais são zero.
+
+Ao atualizar para a etapa 05, execute o bootstrap: o Compose configura `log_bin_trust_function_creators=1` nos bancos de desenvolvimento/teste para permitir a migration dos triggers com o usuário da aplicação. O bootstrap recria o serviço MySQL se sua configuração mudou, preserva o volume e aplica a nova migration.
 
 O primeiro build pode levar alguns minutos. Os serviços ficam disponíveis em:
 
@@ -114,7 +123,7 @@ Esse comando não precisa iniciar MySQL, Redis, worker nem o kernel Laravel. Par
 
 `bash scripts/test-mysql.sh` inicia `mysql-test` e executa `test-runner` pelo perfil `test`. Esse banco é descartável, usa `tmpfs`, não publica porta e não compartilha o volume de desenvolvimento. A suíte recria somente `finance_ledger_test`, exige `MYSQL_TEST_RESET=1` e recusa configuração em cache. O script para o banco ao terminar. As dependências PHP devem estar instaladas pelo bootstrap.
 
-Consulte [docs/step-04.md](docs/step-04.md) e [docs/openapi.yaml](docs/openapi.yaml) para os endpoints e exemplos. **258 testes backend passaram**: 116 do núcleo, 71 HTTP/JWT/isolamento e 71 no MySQL 8.4.11. A suíte HTTP passou duas vezes consecutivas com as variáveis de desenvolvimento herdadas do processo, após a correção de isolamento descrita abaixo. Compose e scripts foram validados estaticamente; a execução completa dos containers permanece pendente no Ubuntu/CI porque o ambiente de implementação não tem daemon Docker. Frontend não foi alterado nesta etapa. O schema financeiro está documentado em [docs/step-03.md](docs/step-03.md).
+Consulte [docs/step-05.md](docs/step-05.md) para o contrato de postagem, os locks, a migration e os testes de concorrência. Os endpoints de autenticação continuam em [docs/step-04.md](docs/step-04.md) e [docs/openapi.yaml](docs/openapi.yaml). **307 testes backend passaram**: 129 do núcleo, 71 HTTP/JWT/isolamento e 107 no MySQL 8.4.11. As suítes de núcleo/HTTP foram executadas com as variáveis de desenvolvimento herdadas do processo. A integração usou o usuário de banco sem privilégios globais, incluindo criação dos triggers e processos concorrentes. Compose e scripts foram validados estaticamente; a execução completa dos containers permanece pendente no Ubuntu/CI porque o ambiente de implementação não tem daemon Docker. Frontend não foi alterado nesta etapa. O schema financeiro está documentado em [docs/step-03.md](docs/step-03.md).
 
 Os dois arquivos PHPUnit configuram tanto `<env force="true">` quanto `<server>`: Laravel consulta `$_SERVER` antes de `$_ENV`/`getenv()`. Isso impede que os valores do Compose selecionem o Redis de desenvolvimento durante os testes e compartilhem contadores de login entre casos/execuções. A correção dos erros 429 da etapa 04 está detalhada em [docs/step-04.md](docs/step-04.md#correção-do-isolamento-dos-testes-no-container). Depois de atualizar esses arquivos, execute novamente `bash scripts/check.sh`; não é necessário refazer o bootstrap ou remover volumes para aplicar esta correção.
 
@@ -122,6 +131,6 @@ A situação da infraestrutura anterior está em [docs/step-01.md](docs/step-01.
 
 ## Próximo incremento
 
-Implementar postagem atômica do cabeçalho e das partidas, idempotência no banco, imutabilidade do livro e trigger de revisão/`staled`. Depois vêm recálculo e consulta dos saldos, seguindo o plano aprovado.
+Implementar o recálculo consistente dos saldos e a consulta paginada com no máximo 10 contas, recalculando projeções `staled` antes da resposta. O mesmo caso de uso será reutilizado pelo processo independente, seguindo o plano aprovado.
 
 As separações arquiteturais estão em [docs/architecture.md](docs/architecture.md), e as regras do teste estão em [docs/decisions.md](docs/decisions.md).

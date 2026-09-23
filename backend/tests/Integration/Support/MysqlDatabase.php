@@ -9,6 +9,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Bootstrap\HandleExceptions;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 final class MysqlDatabase
@@ -36,7 +37,7 @@ final class MysqlDatabase
         return $app;
     }
 
-    public static function migrate(): void
+    public static function migrate(?TestCase $testCase = null): void
     {
         $app = self::application();
         $exit = Artisan::call('migrate:fresh', ['--force' => true]);
@@ -45,6 +46,6 @@ final class MysqlDatabase
         }
         $app->make('db')->disconnect();
         $app->flush();
-        HandleExceptions::flushState();
+        HandleExceptions::flushState($testCase);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Application\Accounting\Contracts\AccountRepository;
+use App\Application\Accounting\Contracts\JournalRepository;
 use App\Application\Auth\Contracts\PasswordHasher;
 use App\Application\Auth\Contracts\TokenRevocationRepository;
 use App\Application\Auth\Contracts\TokenService;
@@ -13,6 +14,7 @@ use App\Infrastructure\Auth\JwtSettings;
 use App\Infrastructure\Auth\LcobucciTokenService;
 use App\Infrastructure\Auth\SystemClock;
 use App\Infrastructure\Persistence\MysqlAccountRepository;
+use App\Infrastructure\Persistence\MysqlJournalRepository;
 use App\Infrastructure\Persistence\MysqlTokenRevocationRepository;
 use App\Infrastructure\Persistence\MysqlUserRepository;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -29,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(AccountRepository::class, MysqlAccountRepository::class);
+        $this->app->bind(JournalRepository::class, MysqlJournalRepository::class);
         $this->app->bind(UserRepository::class, MysqlUserRepository::class);
         $this->app->bind(TokenRevocationRepository::class, MysqlTokenRevocationRepository::class);
         $this->app->singleton(Clock::class, SystemClock::class);
