@@ -81,6 +81,8 @@ services:
 
   mysql:
     image: mysql:8.4@sha256:0744ee5ef89ce6ccfa13de3e579fe6b9e27f93dd70da9c06d2c908b1b193fb8d
+    # Permit trigger migrations with the database-scoped application user.
+    command: ["--log-bin-trust-function-creators=1"]
     environment:
       MYSQL_DATABASE: ${DB_DATABASE}
       MYSQL_USER: ${DB_USERNAME}
@@ -98,6 +100,7 @@ services:
   mysql-test:
     profiles: [test]
     image: mysql:8.4@sha256:0744ee5ef89ce6ccfa13de3e579fe6b9e27f93dd70da9c06d2c908b1b193fb8d
+    command: ["--log-bin-trust-function-creators=1"]
     environment:
       MYSQL_DATABASE: finance_ledger_test
       MYSQL_USER: ledger_test
@@ -153,6 +156,15 @@ services:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+
+  balance-projector:
+    <<: *php
+    command: ["php", "artisan", "balances:project", "--sleep=1", "--max-time=3600"]
+    restart: unless-stopped
+    stop_grace_period: 70s
+    depends_on:
+      mysql:
         condition: service_healthy
 
   frontend:

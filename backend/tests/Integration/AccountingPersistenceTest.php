@@ -138,7 +138,7 @@ final class AccountingPersistenceTest extends TestCase
         $journal = DB::table('journal_entries')->insertGetId($this->journalData());
         DB::table('ledger_entries')->insert($this->ledgerData($journal));
         $this->expectSqlError(1062, fn () => DB::table('ledger_entries')->insert($this->ledgerData($journal, '7002')));
-        $this->expectSqlError(1451, fn () => DB::table('journal_entries')->where('id', $journal)->delete());
+        $this->expectSqlError(1644, fn () => DB::table('journal_entries')->where('id', $journal)->delete());
     }
 
     public function test_cents_and_negative_balances_round_trip_without_floating_point(): void
