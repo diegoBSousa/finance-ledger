@@ -4,10 +4,15 @@ use App\Application\Auth\AuthenticationFailed;
 use App\Application\Auth\AuthenticationUnavailable;
 use App\Application\Balances\AccountNotFound;
 use App\Application\Balances\BalanceUnavailable;
+use App\Application\Imports\ImportNotFound;
+use App\Application\Imports\ImportUnavailable;
+use App\Application\Imports\InvalidImportFile;
+use App\Application\Imports\UploadTooLarge;
 use App\Http\Middleware\AuthenticateJwt;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -26,6 +31,14 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
         $exceptions->dontReport([AuthenticationFailed::class, AccountNotFound::class]);
+        $exceptions->dontReport([InvalidImportFile::class, UploadTooLarge::class, ImportNotFound::class]);
+        $exceptions->render(fn (InvalidImportFile $e) => response()->json(['message' => $e->getMessage(), 'code' => $e->reason], 422));
+        $exceptions->render(fn (ImportNotFound $e) => response()->json(['message' => $e->getMessage(), 'code' => 'import_not_found'], 404));
+        $exceptions->render(fn (ImportUnavailable $e) => response()->json(['message' => $e->getMessage(), 'code' => 'import_unavailable'], 503));
+        $tooLarge = fn () => response()->json(['message' => 'The CSV must not exceed 100000000 bytes.', 'code' => 'upload_too_large'], 413);
+        $exceptions->render(fn (UploadTooLarge $e) => $tooLarge());
+        $exceptions->render(fn (PostTooLargeException $e) => $tooLarge());
+
         $exceptions->render(fn (AccountNotFound $exception) => response()->json([
             'message' => $exception->getMessage(), 'code' => 'account_not_found',
         ], 404));

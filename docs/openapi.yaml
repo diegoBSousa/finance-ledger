@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: Finance Ledger API
-  version: 0.6.0
+  version: 0.7.0
   description: >-
-    Endpoints operacionais, autenticação e consulta consistente de saldos até a etapa 06.
+    Endpoints operacionais, autenticação, saldos, upload e acompanhamento até a etapa 07.
     JWT de 900 segundos, sem refresh; logout revoga somente o token apresentado.
+    O worker prepara o CSV; a leitura financeira por chunks será implementada na próxima etapa.
 servers:
   - url: http://localhost:8080/api/v1
     description: Desenvolvimento local
@@ -211,6 +212,108 @@ paths:
               schema: {$ref: '#/components/schemas/Error'}
               example: {message: 'Account not found.', code: account_not_found}
         '503': {$ref: '#/components/responses/BalanceUnavailable'}
+  /imports:
+    post:
+      operationId: uploadCsvImport
+      security: [{bearerAuth: []}]
+      description: >-
+        Exatamente um campo multipart file, sem outros campos ou arquivos.
+        CSV não vazio, nome com extensão .csv (case insensitive), até 255 bytes UTF-8
+        depois de remover componentes de diretório. Limite exato de 100000000 bytes por
+        arquivo; envelope multipart de até 110000000 bytes. MIME do cliente não prova conteúdo.
+        Persiste arquivo privado e importação com intenção de processamento na outbox,
+        sem depender de publicação Redis na requisição. Validação de cabeçalho/integridade
+        ocorre no worker. Reenvio cria outro acompanhamento; idempotência financeira é por linha.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV de 1 a 100000000 bytes; cabeçalho date,description,amount,type.
+      responses:
+        '202':
+          description: Arquivo registrado; preparação e processamento são assíncronos.
+          headers:
+            Location:
+              description: Caminho relativo da consulta de status; mesmo valor de data.status_url.
+              schema: {type: string, example: '/api/v1/imports/15'}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImportResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '413': {$ref: '#/components/responses/UploadTooLarge'}
+        '422': {$ref: '#/components/responses/InvalidImportUpload'}
+        '503': {$ref: '#/components/responses/ImportUnavailable'}
+    get:
+      operationId: listImports
+      security: [{bearerAuth: []}]
+      description: >-
+        Importações do usuário autenticado, ordenadas por ID decrescente.
+        Padrão/máximo de 10 itens. Página além da última retorna data vazio.
+      parameters:
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 9223372036854775807, default: 1}
+          description: Inteiro decimal; offsets fora da faixa assinada de 64 bits retornam 422.
+        - name: per_page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 10, default: 10}
+      responses:
+        '200':
+          description: Página de acompanhamentos do titular
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    maxItems: 10
+                    items: {$ref: '#/components/schemas/Import'}
+                  meta: {$ref: '#/components/schemas/PageMeta'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidQuery'}
+        '503': {$ref: '#/components/responses/ImportUnavailable'}
+  /imports/{importId}:
+    get:
+      operationId: getImport
+      security: [{bearerAuth: []}]
+      description: Importação alheia e inexistente têm a mesma resposta 404.
+      parameters:
+        - name: importId
+          in: path
+          required: true
+          schema: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19, example: '15'}
+          description: ID positivo até 9223372036854775807.
+      responses:
+        '200':
+          description: Acompanhamento atual da importação
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImportResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404':
+          description: Importação não encontrada para o titular
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {message: 'Import not found.', code: import_not_found}
+        '503': {$ref: '#/components/responses/ImportUnavailable'}
 components:
   securitySchemes:
     bearerAuth:
@@ -229,6 +332,57 @@ components:
     UnsignedInteger:
       type: string
       pattern: '^(0|[1-9][0-9]*)$'
+    ImportResponse:
+      type: object
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/Import'}
+    Import:
+      type: object
+      additionalProperties: false
+      required: [id, original_name, file_size_bytes, status, processed_rows, inserted_rows, duplicate_rows, rejected_rows, created_at, prepared_at, started_at, finished_at, error_code, status_url]
+      properties:
+        id: {type: string, pattern: '^[1-9][0-9]*$', example: '15'}
+        original_name:
+          type: string
+          maxLength: 255
+          description: Nome recebido, sem componentes de diretório, limitado a 255 bytes UTF-8.
+          example: financial_transactions.csv
+        file_size_bytes: {type: integer, minimum: 1, maximum: 100000000, example: 788178}
+        status:
+          type: string
+          enum: [pending, processing, completed, completed_with_errors, failed]
+          description: >-
+            Na etapa 07, pending inclui arquivo preparado aguardando o consumidor de chunks;
+            failed registra falha definitiva de preparação. Os demais estados serão usados
+            pelo processamento financeiro, ainda não implementado no leitor de arquivos.
+        processed_rows: {$ref: '#/components/schemas/UnsignedInteger'}
+        inserted_rows: {$ref: '#/components/schemas/UnsignedInteger'}
+        duplicate_rows: {$ref: '#/components/schemas/UnsignedInteger'}
+        rejected_rows: {$ref: '#/components/schemas/UnsignedInteger'}
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-09-23T12:00:00.000000Z'
+        prepared_at:
+          type: [string, 'null']
+          format: date-time
+          description: UTC; preenchido depois da verificação de integridade/cabeçalho e commit do checkpoint inicial.
+        started_at:
+          type: [string, 'null']
+          format: date-time
+          description: Início do processamento financeiro; permanece null nesta etapa.
+        finished_at:
+          type: [string, 'null']
+          format: date-time
+        error_code:
+          type: [string, 'null']
+          description: Código seguro de falha; não expõe mensagens SQL ou caminhos privados.
+          examples: [null, invalid_csv_header, source_file_missing, source_file_changed]
+        status_url:
+          type: string
+          pattern: '^/api/v1/imports/[1-9][0-9]*$'
+          example: /api/v1/imports/15
     AccountBalance:
       type: object
       additionalProperties: false
@@ -272,8 +426,38 @@ components:
         message: {type: string}
         code:
           type: string
-          enum: [invalid_credentials, unauthenticated, rate_limited, authentication_unavailable, account_not_found, balance_unavailable]
+          enum: [invalid_credentials, unauthenticated, rate_limited, authentication_unavailable, account_not_found, balance_unavailable, import_not_found, import_unavailable, upload_too_large, multipart_required, invalid_multipart, one_csv_required, incomplete_upload, empty_csv_file, invalid_csv_file]
   responses:
+    UploadTooLarge:
+      description: Arquivo acima de 100000000 bytes ou corpo multipart acima de 110000000 bytes.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {message: 'The CSV must not exceed 100000000 bytes.', code: upload_too_large}
+    InvalidImportUpload:
+      description: >-
+        CSV vazio, nome inválido, upload incompleto, multipart inválido ou violação
+        do contrato de exatamente um campo file. O código distingue o motivo.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          examples:
+            file:
+              value: {message: 'The uploaded CSV is invalid.', code: invalid_csv_file}
+            multipart:
+              value: {message: 'The uploaded CSV is invalid.', code: invalid_multipart}
+    ImportUnavailable:
+      description: Autenticação, persistência, armazenamento ou configuração de upload temporariamente indisponível.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {message: 'Imports are temporarily unavailable.', code: import_unavailable}
     InvalidQuery:
       description: Paginação ou filtro inválido
       headers:

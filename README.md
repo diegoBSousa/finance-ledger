@@ -1,8 +1,16 @@
-# Finance Ledger — etapa 06
+# Finance Ledger — etapa 07
 
-Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão acrescenta consulta autenticada de saldos, recálculo consistente sob concorrência e o processo independente de projeção.
+Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão acrescenta upload privado de CSV, acompanhamento autenticado, publicação recuperável da outbox e preparação inicial do arquivo.
 
 ## Implementado até esta etapa
+
+- `POST /api/v1/imports`: exatamente um CSV de até 100.000.000 bytes, com JWT, resposta 202 e URL de acompanhamento.
+- `GET /api/v1/imports` e `GET /api/v1/imports/{importId}`: somente importações do titular, páginas de até 10 e contadores como strings decimais.
+- Armazenamento privado em streaming, nome interno aleatório, SHA-256 e limpeza após falhas quando a ausência de referência SQL é confirmada.
+- Importação, evento `ImportRequested` e entrega persistidos juntos no MySQL; o upload não publica diretamente no Redis.
+- Serviço `outbox-relay` com lotes de até 10, leases, `SKIP LOCKED`, retentativas e republicação de entregas sem confirmação do consumidor.
+- Worker valida integridade/cabeçalho e confirma checkpoint inicial, `prepared_at` e intenção do primeiro chunk na mesma transação.
+- Testes reais de Redis, concorrência e multipart, incluindo 100.000.000 bytes com PHP limitado a 64 MB de memória.
 
 - `GET /api/v1/balances` e `GET /api/v1/accounts/{accountNumber}/balance`, com JWT e filtro obrigatório por titular.
 - Paginação padrão/máximo de 10, filtro por número externo, precisão em centavos BRL e respostas sem cache HTTP.
@@ -37,7 +45,7 @@ Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 
 - `PageRequest` com padrão/máximo 10 e proteção contra overflow do offset.
 - Testes do núcleo, contratos reutilizáveis e verificação das dependências por análise da árvore de sintaxe. A suíte isolada bloqueia o carregamento de Laravel e adapters.
 
-- Docker Compose com `app`, `web`, `mysql`, `redis`, `worker`, `balance-projector` e `frontend`.
+- Docker Compose com `app`, `web`, `mysql`, `redis`, `worker`, `outbox-relay`, `balance-projector` e `frontend`.
 - Dependências PHP/JavaScript travadas em `composer.lock` e `package-lock.json`; imagens oficiais identificadas por digest.
 - Endpoint operacional `GET /api/v1/health`, resposta JSON e CORS para o frontend.
 - Tela inicial que consulta a API, indica indisponibilidade e permite tentar novamente.
@@ -46,9 +54,9 @@ Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 
 - PHPUnit, Larastan/PHPStan, Pint, Vitest, Vue Test Utils, ESLint, checagem TypeScript e workflow de CI.
 - Diagnóstico real de infraestrutura: consulta MySQL, publica um job Redis e confere se o worker leu o arquivo privado escrito pela aplicação.
 
-O caso de uso `PostCsvBatchUseCase` já grava operações financeiras por meio de `MysqlJournalRepository`, usando as contas existentes. A autenticação está disponível na API. O saldo é marcado como `staled` pelo trigger e recalculado na consulta ou pelo `balance-projector`. O evento `LedgerChanged` fica pendente na outbox. Upload/importador de arquivos, relay, consumidor de cache, dashboard e extratos entram nas próximas etapas. O `actorUserId` vem do contexto autenticado/confiável, nunca de um ID livre enviado pelo cliente. A SPA mantém a tela operacional; sua interface de login será implementada com o frontend de negócio.
+O caso de uso `PostCsvBatchUseCase` já grava operações financeiras por meio de `MysqlJournalRepository`, usando as contas existentes. O saldo é marcado como `staled` pelo trigger e recalculado na consulta ou pelo `balance-projector`. O upload agora está disponível, mas o worker desta etapa prepara somente o arquivo: uma importação válida permanece `pending`, com `prepared_at` preenchido e contadores zerados, até a implementação dos chunks. As entregas para `csv-importer` e `dashboard-cache-invalidator` permanecem duráveis e pendentes; o relay publica somente para `import-preparer`. O `actorUserId` vem do JWT, nunca de um ID livre enviado pelo cliente. A SPA mantém a tela operacional; as telas de negócio entram depois do backend.
 
-O endpoint operacional público não expõe dados de negócio. O limite exato de 100.000.000 bytes será validado no futuro caso de uso de upload; PHP/Nginx já têm os limites de transporte. A paginação está conectada à consulta de saldos, com validação HTTP e no DTO.
+O endpoint operacional público não expõe dados de negócio. O limite exato de 100.000.000 bytes é verificado no upload; o corpo multipart admite 110.000.000 bytes para acomodar o envelope. A paginação está conectada aos saldos e às importações, com validação HTTP e no DTO. O login recebe JSON; o upload usa multipart com um único campo `file`.
 
 ## Iniciar no Ubuntu
 
@@ -64,9 +72,9 @@ bash scripts/check.sh
 
 O bootstrap gera `.env` com chaves independentes para aplicação/JWT e senhas aleatórias, usa seu UID/GID para os arquivos, instala as versões dos lockfiles, inicia MySQL/Redis, aplica as migrations, executa o seed e inicia os serviços. Por fim, executa o diagnóstico de fila e volume. Ao executar novamente, preserva configurações e volumes existentes e acrescenta as variáveis de demonstração/JWT se estiverem ausentes.
 
-As 900 contas financeiras pertencem ao usuário definido por `DEMO_USER_EMAIL` (padrão `demo@example.test`). A senha inicial fica em `DEMO_USER_PASSWORD`, gerada pelo bootstrap. O seed usa Argon2id e não troca senhas de usuários existentes. Funciona somente em `local`/`testing`; se uma conta do intervalo já pertencer a outra pessoa, aborta e desfaz o seed inteiro. O CSV ainda não é importado e os saldos iniciais são zero.
+As 900 contas financeiras pertencem ao usuário definido por `DEMO_USER_EMAIL` (padrão `demo@example.test`). A senha inicial fica em `DEMO_USER_PASSWORD`, gerada pelo bootstrap. O seed usa Argon2id e não troca senhas de usuários existentes. Funciona somente em `local`/`testing`; se uma conta do intervalo já pertencer a outra pessoa, aborta e desfaz o seed inteiro. O seed não carrega o CSV e as contas novas começam com saldo zero.
 
-Ao atualizar para a etapa 06, execute o bootstrap: ele aplica a migration de `staled_since` e inicia `balance-projector`. Preserve `.env` e volumes. O Compose mantém `log_bin_trust_function_creators=1` nos bancos de desenvolvimento/teste, permitindo criar os triggers com o usuário da aplicação.
+Ao atualizar para a etapa 07, execute o bootstrap: ele reconstrói a imagem PHP com o parsing multipart explícito, aplica a migration de metadados da importação e inicia `outbox-relay` e o worker nas filas `imports,default`. Preserve `.env` e volumes. O Compose mantém `log_bin_trust_function_creators=1` nos bancos de desenvolvimento/teste, permitindo criar os triggers com o usuário da aplicação.
 
 O primeiro build pode levar alguns minutos. Os serviços ficam disponíveis em:
 
@@ -83,7 +91,7 @@ MySQL, Redis e PHP-FPM não publicam portas no host. Os dois endereços web são
 
 ```bash
 docker compose ps
-docker compose logs -f app web worker balance-projector
+docker compose logs -f app web worker outbox-relay balance-projector
 docker compose exec app php artisan route:list
 docker compose exec app composer test
 docker compose run --rm --no-deps app composer test:core
@@ -91,6 +99,7 @@ bash scripts/test-mysql.sh
 docker compose exec app php artisan db:seed --force
 docker compose exec app php artisan auth:prune-revoked-tokens
 docker compose exec app php artisan balances:project --once
+docker compose exec app php artisan outbox:relay --once
 docker compose exec frontend npm run test
 docker compose exec frontend npm run build
 bash scripts/smoke.sh
@@ -98,7 +107,7 @@ docker compose stop
 docker compose up -d --wait
 ```
 
-Worker e projector mantêm código carregado em memória. Depois de alterar esses processos, use `docker compose restart worker balance-projector`.
+Worker, relay e projector mantêm código carregado em memória. Depois de alterar esses processos, use `docker compose restart worker outbox-relay balance-projector`.
 
 `docker compose down` remove os containers e preserva os volumes. A opção `--volumes` também apaga os bancos/arquivos persistidos; o workflow usa essa opção apenas no ambiente descartável da CI.
 
@@ -127,23 +136,25 @@ docker compose run --rm --no-deps app composer test:core
 
 Esse comando não precisa iniciar MySQL, Redis, worker nem o kernel Laravel. Para execução local com PHP 8.4 e Composer, use `composer install` e `composer test:core` dentro de `backend/`.
 
-`scripts/check.sh` executa validação do Compose, Composer, estilo, análise estática, as três suítes PHP, lint/testes/build frontend e diagnóstico com os serviços reais. `composer test` mantém as suítes de núcleo e HTTP; a integração MySQL é chamada separadamente pelo script.
+`scripts/check.sh` executa validação do Compose, Composer, estilo, análise estática, as três suítes PHP, lint/testes/build frontend e diagnóstico com os serviços reais. `composer test` mantém as suítes de núcleo e HTTP; a integração MySQL/Redis é chamada separadamente pelo script.
 
-`bash scripts/test-mysql.sh` inicia `mysql-test` e executa `test-runner` pelo perfil `test`. Esse banco é descartável, usa `tmpfs`, não publica porta e não compartilha o volume de desenvolvimento. A suíte recria somente `finance_ledger_test`, exige `MYSQL_TEST_RESET=1` e recusa configuração em cache. O script para o banco ao terminar. As dependências PHP devem estar instaladas pelo bootstrap.
+`bash scripts/test-mysql.sh` recria `mysql-test` e `redis-test` com `--force-recreate` e executa `test-runner` pelo perfil `test`. Esses serviços são descartáveis, usam `tmpfs`, não publicam portas e não compartilham os volumes de desenvolvimento. A recriação evita reutilizar containers que ainda referenciem uma rede removida entre execuções do Compose. A suíte recria somente `finance_ledger_test`, exige `MYSQL_TEST_RESET=1` e recusa configuração em cache. Os testes Redis exigem `REDIS_TEST_ENABLED=1`, usam prefixos exclusivos e removem somente suas próprias chaves. O script para os dois serviços ao terminar. As dependências PHP devem estar instaladas pelo bootstrap.
 
-Consulte [docs/step-06.md](docs/step-06.md) para API, recálculo, concorrência, projector e atualização. A postagem está em [docs/step-05.md](docs/step-05.md), autenticação em [docs/step-04.md](docs/step-04.md) e o contrato HTTP em [docs/openapi.yaml](docs/openapi.yaml).
+Consulte [docs/step-07.md](docs/step-07.md) para upload, status, recuperação da outbox e atualização. Os saldos estão em [docs/step-06.md](docs/step-06.md), a postagem em [docs/step-05.md](docs/step-05.md), autenticação em [docs/step-04.md](docs/step-04.md) e o contrato HTTP em [docs/openapi.yaml](docs/openapi.yaml).
 
-**371 testes backend passaram, com 1778 assertions**:
+**435 testes backend passaram, com 2342 assertions**:
 
 | Suíte | Resultado |
 | --- | --- |
-| Núcleo puro e contratos em memória | 146 testes, 1009 assertions |
-| HTTP/JWT e isolamento | 94 testes, 287 assertions |
-| MySQL 8.4.11, contratos, HTTP real e concorrência | 131 testes, 482 assertions |
+| Núcleo puro e contratos em memória | 158 testes, 1303 assertions |
+| HTTP/JWT, armazenamento e isolamento | 116 testes, 363 assertions |
+| MySQL 8.4.11, Redis 8.2.1, HTTP real e concorrência | 161 testes, 676 assertions |
 
-Pint, PHPStan/Larastan nível 6, Composer validate, configuração Compose e sintaxe Bash passaram. As suítes de núcleo/HTTP foram executadas com variáveis de desenvolvimento herdadas do processo. A integração usou o usuário com privilégios somente no banco de testes, incluindo migrations e processos concorrentes. A consulta HTTP de #682 foi validada com JWT e recálculo real no MySQL sem projector em execução.
+Pint, PHPStan/Larastan nível 6, Composer validate, configuração Compose e sintaxe Bash passaram. As suítes de núcleo/HTTP foram executadas com variáveis de desenvolvimento herdadas do processo. A integração usou MySQL e Redis reais e processos PHP independentes. Validou publicação, consumo, perda/republicação de jobs, concorrência e rollback. O transporte multipart foi exercitado com servidor HTTP PHP 8.4 e `memory_limit=64M`: 100.000.000 bytes aceitos, um byte acima recusado e campos extras/arquivos repetidos rejeitados. Isso verifica upload/preparação, não o desempenho da futura importação financeira completa.
 
 A execução completa dos containers permanece pendente no Ubuntu/CI porque o ambiente de implementação não tem daemon Docker. O frontend não mudou e não foi revalidado nesta etapa. O schema original está em [docs/step-03.md](docs/step-03.md).
+
+No log de validação no Ubuntu enviado após esta entrega, o bootstrap, os diagnósticos de infraestrutura, Pint, PHPStan e os 274 testes de núcleo/HTTP passaram. O check parou antes da integração porque `mysql-test` referenciava uma rede inexistente. A correção de inicialização está em [docs/step-07.md](docs/step-07.md#correção-de-network-not-found-nos-testes). Depois de atualizar `scripts/test-mysql.sh`, basta executar `bash scripts/check.sh`; esse ajuste não exige bootstrap, rebuild ou remoção dos volumes de desenvolvimento. A sintaxe Bash e a configuração Compose foram verificadas, mas a recuperação no Docker precisa ser confirmada no Ubuntu.
 
 Os dois arquivos PHPUnit configuram tanto `<env force="true">` quanto `<server>`: Laravel consulta `$_SERVER` antes de `$_ENV`/`getenv()`. Isso impede que os valores do Compose selecionem o Redis de desenvolvimento durante os testes e compartilhem contadores de login entre casos/execuções. A correção dos erros 429 da etapa 04 está detalhada em [docs/step-04.md](docs/step-04.md#correção-do-isolamento-dos-testes-no-container). Depois de atualizar esses arquivos, execute novamente `bash scripts/check.sh`; não é necessário refazer o bootstrap ou remover volumes para aplicar esta correção.
 
@@ -151,6 +162,6 @@ A situação da infraestrutura anterior está em [docs/step-01.md](docs/step-01.
 
 ## Próximo incremento
 
-Implementar relay da outbox, upload de CSV até 100.000.000 bytes e acompanhamento da importação. Em seguida, implementar processamento em chunks, checkpoints e retomada idempotente, seguindo o plano aprovado.
+Implementar o consumidor `csv-importer`: leitura em streaming de até 500 registros por chunk, resultados por linha, checkpoint e próximo evento na mesma transação. Validar retomada, reenvios parciais/sobrepostos e concorrência com o arquivo fornecido, preservando centavos BRL, contas no sufixo e partidas dobradas.
 
 As separações arquiteturais estão em [docs/architecture.md](docs/architecture.md), e as regras do teste estão em [docs/decisions.md](docs/decisions.md).

@@ -4,6 +4,7 @@ return [
     'default' => env('QUEUE_CONNECTION', 'redis'),
     'connections' => [
         'sync' => ['driver' => 'sync'],
+        'outbox' => ['driver' => 'redis', 'connection' => 'outbox', 'queue' => 'imports', 'retry_after' => 90, 'block_for' => null, 'after_commit' => false],
         'redis' => [
             'driver' => 'redis',
             'connection' => 'default',
