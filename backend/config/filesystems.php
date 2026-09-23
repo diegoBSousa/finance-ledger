@@ -32,7 +32,7 @@ return [
 
         'uploads' => [
             'driver' => 'local',
-            'root' => storage_path('app/private/uploads'),
+            'root' => env('IMPORT_UPLOAD_ROOT', storage_path('app/private/uploads')),
             'visibility' => 'private',
             'throw' => true,
         ],
@@ -40,7 +40,7 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

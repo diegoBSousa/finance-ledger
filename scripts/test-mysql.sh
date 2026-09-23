@@ -2,7 +2,8 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-# Only the disposable test service is stopped; the development database is untouched.
-trap 'docker compose --profile test stop mysql-test >/dev/null' EXIT
-docker compose --profile test up -d --wait --wait-timeout 180 mysql-test
+# Recreate disposable test containers to discard references to removed Compose networks.
+# Startup and cleanup target only test services; development data stays in its own volumes.
+trap 'docker compose --profile test stop mysql-test redis-test >/dev/null' EXIT
+docker compose --profile test up -d --force-recreate --wait --wait-timeout 180 mysql-test redis-test
 docker compose --profile test run --rm --no-deps -T test-runner

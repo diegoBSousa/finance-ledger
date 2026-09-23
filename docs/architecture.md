@@ -1,6 +1,6 @@
 # Arquitetura e fronteiras
 
-A etapa 06 acrescenta recálculo consistente, consulta de saldos e processo independente de projeção. O núcleo contábil e os casos de uso continuam testáveis sem Laravel; os adapters MySQL implementam locks, transações e outbox.
+A etapa 07 acrescenta upload privado, acompanhamento, relay recuperável e preparação inicial do CSV. O núcleo contábil e os casos de uso continuam testáveis sem Laravel; os adapters MySQL implementam locks, transações e outbox.
 
 ## Direção das dependências
 
@@ -15,7 +15,7 @@ Controllers de negócio fazem validação de transporte, constroem RequestDTOs e
 
 `Account`, `Posting` e `JournalEntry` implementam `toData()` retornando DTOs imutáveis de `Domain/Accounting/Data`. Assim, as entidades não dependem da camada Application nem de um formato HTTP. O caso de uso envolve `JournalEntryData` em seu próprio ResponseDTO. `Infrastructure/Persistence/Models/AccountRecord` também implementa `toData()`, com casts de identificadores para strings; o repositório não expõe models.
 
-Inserções em lote terão adapters próprios e não dependerão de eventos individuais dos models.
+Inserções em lote usam adapters próprios e não dependem de eventos individuais dos models.
 
 ## Fluxo implementado
 
@@ -63,15 +63,35 @@ O logout grava o identificador aleatório do token e sua expiração em `revoked
 
 O contrato `Clock` expõe segundos como inteiro; o adapter da biblioteca converte para PSR Clock/DateTime internamente. O teste de arquitetura agora verifica todos os contratos de Application, incluindo os de autenticação. Os contracts de usuário e revogação são executados contra os doubles e os adapters reais.
 
-O contexto autenticado já foi integrado ao caso de uso que prepara uma linha CSV, em teste MySQL, verificando a recusa de conta alheia. Os endpoints de saldos usam esse contexto, com filtro por titular e paginação de no máximo 10 itens. Os futuros endpoints de importação e extratos deverão preservar a mesma fronteira. Detalhes do protocolo estão em [step-04.md](step-04.md).
+O contexto autenticado já foi integrado ao caso de uso que prepara uma linha CSV, em teste MySQL, verificando a recusa de conta alheia. Os endpoints de saldos e importações usam esse contexto, com filtro por titular e paginação de no máximo 10 itens. Os futuros extratos deverão preservar a mesma fronteira. Detalhes do protocolo estão em [step-04.md](step-04.md).
+
+## Upload e preparação do arquivo
+
+`UploadCsvController` recebe um único `UploadedFile` validado na borda HTTP e converte caminho temporário confiável, nome original e identidade autenticada em `UploadCsvRequest`. `UploadCsvUseCase` usa `ImportFileStorage` e `ImportRepository`; essas portas só recebem escalares e DTOs próprios. `ImportRecord::toData()` e `ImportPresenter` separam o registro persistido da resposta pública.
+
+O adapter de armazenamento grava em blocos de 1 MB sob chave aleatória, verifica o limite real de 100.000.000 bytes, calcula SHA-256 e sincroniza o arquivo antes de registrar a importação. O arquivo fica no volume privado. Seu nome original é metadado; nunca determina o caminho de persistência.
+
+Importação, `ImportRequested` e entrega `import-preparer` são confirmados na mesma transação MySQL. Redis não participa dessa requisição. Como o filesystem não participa da transação SQL, uma falha posterior só remove o arquivo quando uma consulta confirma que ele não está referenciado. Commit com resposta perdida ou banco indisponível conserva a origem; a limpeza de órfãos remanescentes será implementada posteriormente.
+
+O worker chama `PrepareImportUseCase`, que obtém posse temporária da importação, valida tamanho/checksum/cabeçalho em streaming e confirma `prepared_at`, offset após o cabeçalho, evento `ImportChunkRequested` e confirmação da entrega original juntos. A gravação revalida token de posse e expiração sob lock. Arquivo inválido termina como `failed`; falha técnica libera a própria posse e permite nova tentativa. Essa preparação não interpreta registros financeiros nem altera saldos.
+
+Uma importação preparada permanece `pending` nesta versão, com contadores zero. O hash integral protege a origem; a identidade financeira continua sendo o hash canônico de cada registro por titular. Dois uploads iguais criam dois acompanhamentos, e a futura importação reutilizará a idempotência transacional já implementada na postagem. Protocolo, limites e exemplos estão em [step-07.md](step-07.md).
+
+## Publicação e confirmação da outbox
+
+`RelayOutboxUseCase` usa `OutboxRepository` para reservar até 10 entregas em transação curta com `SKIP LOCKED`. Depois do commit, `OutboxPublisher` publica apenas o identificador da entrega no Redis. Os leases de publicação duram 60 segundos; o job usa timeout de 60 segundos e a fila, `retry_after` de 90 segundos. A posse da preparação dura 180 segundos.
+
+Aceitação pelo Redis muda a entrega para `published`; apenas o commit do consumidor a torna `acknowledged`. Entregas publicadas há 300 segundos sem confirmação e reservas expiradas ficam elegíveis novamente. Falhas conhecidas de publicação recebem atraso exponencial de 2 a 256 segundos. Escritas do relay comparam status/token, preservando confirmações antecipadas e reservas de outro processo. Uma resposta SQL perdida depois de publicar não vira confirmação fictícia nem apaga a intenção durável.
+
+O protocolo admite entregas repetidas. A idempotência da preparação, os locks e a posse revalidada impedem gerar mais de uma intenção inicial de chunk. O relay atual atende somente `import-preparer`; `csv-importer` e `dashboard-cache-invalidator` ficam pendentes até seus consumidores serem implementados. Não há confirmação automática de eventos sem handler.
 
 ## Processos
 
-App, worker e `balance-projector` compartilham a imagem PHP. O volume `uploads` fica fora da raiz pública do Nginx. O futuro `outbox-relay` reutilizará essa imagem quando seu caso de uso estiver implementado.
+App, worker, `outbox-relay` e `balance-projector` compartilham a imagem PHP. O volume `uploads` fica fora da raiz pública do Nginx. O worker atende `imports,default`; o relay depende somente do MySQL para iniciar e retenta quando Redis está indisponível.
 
 O `balance-projector` acessa diretamente o MySQL, sem depender do Redis. `ProjectBalancesUseCase` busca pendências em lotes de até 10 e reutiliza `RefreshAccountBalanceUseCase`. O cursor percorre contas mesmo quando algumas falham ou estão ocupadas; voltará a elas na passagem seguinte. `SKIP LOCKED` é exclusivo dessa execução em segundo plano.
 
-Redis usa AOF, limite de memória e `noeviction`. Cache e filas usam bancos lógicos distintos, mas compartilham a política de memória. A durabilidade dos futuros eventos de negócio será garantida por outbox transacional e reconciliação, não apenas por `after_commit` ou AOF.
+Redis usa AOF, limite de memória e `noeviction`. Cache e filas usam bancos lógicos distintos, mas compartilham a política de memória. A conexão do publicador tem timeouts de conexão/leitura de 2 segundos, separados do consumo bloqueante do worker. A outbox mantém a intenção durável e reconcilia entregas sem conclusão; `after_commit` e AOF são complementares. Os testes de integração usam MySQL e Redis descartáveis e isolados dos volumes de desenvolvimento.
 
 ## Referências oficiais consultadas
 
@@ -79,3 +99,5 @@ Redis usa AOF, limite de memória e `noeviction`. Cache e filas usam bancos lóg
 - [Laravel: deployment, PHP-FPM e health route](https://laravel.com/docs/13.x/deployment)
 - [Docker Compose: ordem de inicialização e healthchecks](https://docs.docker.com/compose/how-tos/startup-order/)
 - [Vue: estratégias e ferramentas de testes](https://vuejs.org/guide/scaling-up/testing.html)
+- [PHP 8.4: parsing explícito do corpo multipart](https://www.php.net/manual/en/function.request-parse-body.php)
+- [Laravel 13: filas, transações e timeouts](https://github.com/laravel/docs/blob/13.x/queues.md)

@@ -115,6 +115,17 @@ services:
       timeout: 5s
       retries: 30
 
+  redis-test:
+    profiles: [test]
+    image: redis:8.2-alpine@sha256:5517128c78ca95f28f7dc6a90e2f808f35f01a4a01c2c20e514571b4d9706275
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    tmpfs: ["/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
   test-runner:
     <<: *php
     profiles: [test]
@@ -126,6 +137,13 @@ services:
       DB_USERNAME: ledger_test
       DB_PASSWORD: disposable-test-password
       MYSQL_TEST_RESET: 1
+      REDIS_TEST_ENABLED: 1
+      REDIS_HOST: redis-test
+      REDIS_URL: ""
+      REDIS_PREFIX: "finance_ledger_tests:"
+      REDIS_DB: 0
+      REDIS_TEST_HOST: redis-test
+      REDIS_TEST_PORT: 6379
       CACHE_STORE: array
       QUEUE_CONNECTION: sync
       LOG_CHANNEL: stderr
@@ -133,6 +151,8 @@ services:
       - ./backend:/var/www/html
     depends_on:
       mysql-test:
+        condition: service_healthy
+      redis-test:
         condition: service_healthy
     command: ["composer", "test:integration"]
 
@@ -149,13 +169,22 @@ services:
 
   worker:
     <<: *php
-    command: ["php", "artisan", "queue:work", "redis", "--queue=default", "--sleep=1", "--tries=3", "--timeout=60", "--max-time=3600"]
+    command: ["php", "artisan", "queue:work", "redis", "--queue=imports,default", "--sleep=1", "--tries=3", "--timeout=60", "--max-time=3600"]
     restart: unless-stopped
     stop_grace_period: 70s
     depends_on:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+
+  outbox-relay:
+    <<: *php
+    command: ["php", "artisan", "outbox:relay", "--max-time=3600"]
+    restart: unless-stopped
+    stop_grace_period: 70s
+    depends_on:
+      mysql:
         condition: service_healthy
 
   balance-projector:
