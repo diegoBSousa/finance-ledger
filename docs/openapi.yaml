@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: Finance Ledger API
-  version: 0.4.0
+  version: 0.6.0
   description: >-
-    Endpoints operacionais e de autenticação implementados até a etapa 04.
+    Endpoints operacionais, autenticação e consulta consistente de saldos até a etapa 06.
     JWT de 900 segundos, sem refresh; logout revoga somente o token apresentado.
 servers:
   - url: http://localhost:8080/api/v1
@@ -137,6 +137,80 @@ paths:
                       revoked: {type: boolean, const: true}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /balances:
+    get:
+      operationId: listAccountBalances
+      security: [{bearerAuth: []}]
+      description: >-
+        Somente contas financeiras do titular, inclusive inativas, por ID interno crescente.
+        Recalcula cada projeção pendente antes da resposta. Valores são centavos BRL em strings.
+        Cada conta representa um estado consistente observado durante a requisição; a página
+        não promete snapshot simultâneo entre contas. Falha de recálculo retorna 503 sem dados parciais.
+      parameters:
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 9223372036854775807, default: 1}
+          description: Inteiro decimal; offsets fora da faixa assinada de 64 bits retornam 422.
+        - name: per_page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 10, default: 10}
+        - name: account_number
+          in: query
+          schema: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19, example: '682'}
+          description: Número externo positivo até 9223372036854775807; não é o ID interno.
+      responses:
+        '200':
+          description: Página de saldos atuais; página além da última ou filtro sem resultado retorna data vazio.
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    maxItems: 10
+                    items: {$ref: '#/components/schemas/AccountBalance'}
+                  meta: {$ref: '#/components/schemas/PageMeta'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidQuery'}
+        '503': {$ref: '#/components/responses/BalanceUnavailable'}
+  /accounts/{accountNumber}/balance:
+    get:
+      operationId: getAccountBalance
+      security: [{bearerAuth: []}]
+      description: >-
+        Saldo de uma conta financeira do titular, resolvida pelo número externo, com recálculo
+        obrigatório se pendente. Conta alheia e inexistente têm a mesma resposta 404.
+      parameters:
+        - name: accountNumber
+          in: path
+          required: true
+          schema: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19, example: '682'}
+      responses:
+        '200':
+          description: Saldo consistente da conta
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/AccountBalance'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404':
+          description: Conta não encontrada para o titular
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {message: 'Account not found.', code: account_not_found}
+        '503': {$ref: '#/components/responses/BalanceUnavailable'}
 components:
   securitySchemes:
     bearerAuth:
@@ -148,6 +222,41 @@ components:
     NoStore:
       schema: {type: string, example: 'no-store, private'}
   schemas:
+    DecimalInteger:
+      type: string
+      pattern: '^-?(0|[1-9][0-9]*)$'
+      description: Inteiro decimal exato; para dinheiro, centavos de BRL.
+    UnsignedInteger:
+      type: string
+      pattern: '^(0|[1-9][0-9]*)$'
+    AccountBalance:
+      type: object
+      additionalProperties: false
+      required: [account_id, account_number, active, currency, debit_total_minor, credit_total_minor, balance_minor, ledger_version, calculated_version, calculated_at]
+      properties:
+        account_id: {type: string, pattern: '^[1-9][0-9]*$', example: '42'}
+        account_number: {type: string, pattern: '^[1-9][0-9]*$', example: '682'}
+        active: {type: boolean}
+        currency: {type: string, const: BRL}
+        debit_total_minor: {$ref: '#/components/schemas/UnsignedInteger'}
+        credit_total_minor: {$ref: '#/components/schemas/UnsignedInteger'}
+        balance_minor: {$ref: '#/components/schemas/DecimalInteger'}
+        ledger_version: {$ref: '#/components/schemas/UnsignedInteger'}
+        calculated_version: {$ref: '#/components/schemas/UnsignedInteger'}
+        calculated_at:
+          type: [string, 'null']
+          format: date-time
+          description: Instante UTC do cálculo, nulo somente se a projeção legada não tiver timestamp.
+          example: '2026-09-23T12:00:00.000000Z'
+    PageMeta:
+      type: object
+      required: [current_page, per_page, total, last_page, has_next_page]
+      properties:
+        current_page: {type: integer, minimum: 1}
+        per_page: {type: integer, minimum: 1, maximum: 10}
+        total: {type: integer, minimum: 0}
+        last_page: {type: integer, minimum: 1}
+        has_next_page: {type: boolean}
     User:
       type: object
       additionalProperties: false
@@ -163,8 +272,35 @@ components:
         message: {type: string}
         code:
           type: string
-          enum: [invalid_credentials, unauthenticated, rate_limited, authentication_unavailable]
+          enum: [invalid_credentials, unauthenticated, rate_limited, authentication_unavailable, account_not_found, balance_unavailable]
   responses:
+    InvalidQuery:
+      description: Paginação ou filtro inválido
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message, errors]
+            properties:
+              message: {type: string}
+              errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items: {type: string}
+    BalanceUnavailable:
+      description: Autenticação ou consulta/recálculo temporariamente indisponível; nenhum saldo é retornado.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+        Retry-After:
+          description: Presente para balance_unavailable, sugestão de nova tentativa em segundos.
+          schema: {type: string, example: '1'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {message: 'Account balances are temporarily unavailable.', code: balance_unavailable}
     Unauthorized:
       description: Credenciais inválidas ou token ausente, inválido, expirado ou revogado
       headers:

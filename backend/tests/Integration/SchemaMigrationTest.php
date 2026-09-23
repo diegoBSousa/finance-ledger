@@ -62,7 +62,7 @@ final class SchemaMigrationTest extends TestCase
             foreach (['accounts', 'account_balances', 'financial_states', 'journal_entries', 'ledger_entries', 'imports', 'import_rows', 'outbox_events', 'outbox_deliveries', 'revoked_tokens'] as $table) {
                 self::assertTrue(Schema::hasTable($table), $table);
             }
-            self::assertSame(5, DB::table('information_schema.TRIGGERS')->where('TRIGGER_SCHEMA', 'finance_ledger_test')->count());
+            self::assertSame(6, DB::table('information_schema.TRIGGERS')->where('TRIGGER_SCHEMA', 'finance_ledger_test')->count());
         } finally {
             $app->make('db')->disconnect();
             $app->flush();

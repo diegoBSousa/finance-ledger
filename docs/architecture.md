@@ -1,6 +1,6 @@
 # Arquitetura e fronteiras
 
-A etapa 05 acrescenta postagem atômica, invalidação transacional e imutabilidade do livro. O núcleo contábil e os casos de uso continuam testáveis sem Laravel; os adapters MySQL implementam locks, transações e outbox.
+A etapa 06 acrescenta recálculo consistente, consulta de saldos e processo independente de projeção. O núcleo contábil e os casos de uso continuam testáveis sem Laravel; os adapters MySQL implementam locks, transações e outbox.
 
 ## Direção das dependências
 
@@ -37,11 +37,21 @@ BRL é a única moeda representável pelo enum `Currency`; códigos não suporta
 
 ## Postagem e concorrência
 
-Cada lote tem um titular autenticado e até 500 operações. O escritor bloqueia o estado do titular, as projeções por ID crescente e as contas nessa mesma ordem. As contas são revalidadas sob lock para impedir que uma preparação antiga use uma conta desativada. O recálculo futuro bloqueará projeções, sem pedir depois o lock do titular.
+Cada lote tem um titular autenticado e até 500 operações. O escritor bloqueia o estado do titular, as projeções por ID crescente e as contas nessa mesma ordem. As contas são revalidadas sob lock para impedir que uma preparação antiga use uma conta desativada. O recálculo bloqueia projeções, sem pedir depois o lock do titular.
 
 A deduplicação usa leitura bloqueante atual, inclusive dentro de uma transação externa com snapshot anterior. Novas operações produzem duas partidas; duplicatas não produzem invalidação ou eventos. O trigger apenas mantém metadados: agregações e publicação Redis ficam fora dele. Uma falha em qualquer escrita desfaz o lote e os efeitos dos triggers.
 
 As conexões MySQL limitam a espera InnoDB a 5 segundos. O adapter tenta até três vezes quando gerencia a transação externa; se for chamado dentro da transação de um futuro importador, o chamador precisa desfazer e retentar o lote externo após uma falha de concorrência. O retorno do repositório só é durável depois do commit externo.
+
+## Consulta e projeção de saldos
+
+`ListAccountBalancesUseCase` seleciona contas financeiras do titular em ordem de ID e chama o recálculo para cada uma das até 10 contas da página. `GetAccountBalanceUseCase` usa o número externo para resolver uma única conta. Contas inativas preservam a consulta histórica. `BalanceRepository` expõe DTOs próprios; `AccountBalanceRecord::toData()` converte o model e mantém dinheiro/IDs/versões em strings decimais.
+
+`MysqlBalanceRepository` possui conexão PDO reservada `balance_projection`, configurada em `READ COMMITTED`/UTC e independente da transação do escritor. Cada recálculo verifica titularidade, bloqueia a projeção, relê flag/versões, agrega somente partidas confirmadas e confirma totais/versões antes de devolver o DTO. Uma transação externa na conexão reservada é rejeitada. A soma não toma locks no ledger nem no estado do titular.
+
+Se a projeção já estiver consistente, o timestamp permanece igual. Overflow ou falha SQL gera `BalanceUnavailable`, com rollback, sem substituir o saldo por zero. O HTTP retorna 503 sem dados parciais. Cada conta representa um estado observado durante a requisição; a página não oferece um snapshot global. Os responses HTTP usam `no-store`.
+
+O trigger `account_balances_track_staleness` mantém `staled_since` para métricas, preservando o início da pendência até o recálculo. Ele não participa da soma nem cria eventos. A decisão de atualidade usa `staled` e as versões. Algoritmo, endpoints, limites e comandos estão em [step-06.md](step-06.md).
 
 ## Autenticação
 
@@ -53,13 +63,13 @@ O logout grava o identificador aleatório do token e sua expiração em `revoked
 
 O contrato `Clock` expõe segundos como inteiro; o adapter da biblioteca converte para PSR Clock/DateTime internamente. O teste de arquitetura agora verifica todos os contratos de Application, incluindo os de autenticação. Os contracts de usuário e revogação são executados contra os doubles e os adapters reais.
 
-O contexto autenticado já foi integrado ao caso de uso que prepara uma linha CSV, em teste MySQL, verificando a recusa de conta alheia. Os endpoints de importação e consultas financeiras ainda serão implementados e deverão usar esse mesmo contexto, com filtro por titular e paginação de no máximo 10 itens. Detalhes do protocolo estão em [step-04.md](step-04.md).
+O contexto autenticado já foi integrado ao caso de uso que prepara uma linha CSV, em teste MySQL, verificando a recusa de conta alheia. Os endpoints de saldos usam esse contexto, com filtro por titular e paginação de no máximo 10 itens. Os futuros endpoints de importação e extratos deverão preservar a mesma fronteira. Detalhes do protocolo estão em [step-04.md](step-04.md).
 
 ## Processos
 
-App e worker compartilham a mesma imagem PHP e o volume `uploads`, montado fora da raiz pública do Nginx. Os futuros processos `outbox-relay` e `balance-projector` reutilizarão essa imagem, com comandos Artisan independentes. Eles serão incluídos quando existirem os casos de uso correspondentes; não há processos vazios simulando esses serviços.
+App, worker e `balance-projector` compartilham a imagem PHP. O volume `uploads` fica fora da raiz pública do Nginx. O futuro `outbox-relay` reutilizará essa imagem quando seu caso de uso estiver implementado.
 
-O `balance-projector` terá acesso direto ao MySQL e funcionará sem a fila Redis. O mesmo caso de uso de recálculo será utilizado pela consulta HTTP das contas `staled`.
+O `balance-projector` acessa diretamente o MySQL, sem depender do Redis. `ProjectBalancesUseCase` busca pendências em lotes de até 10 e reutiliza `RefreshAccountBalanceUseCase`. O cursor percorre contas mesmo quando algumas falham ou estão ocupadas; voltará a elas na passagem seguinte. `SKIP LOCKED` é exclusivo dessa execução em segundo plano.
 
 Redis usa AOF, limite de memória e `noeviction`. Cache e filas usam bancos lógicos distintos, mas compartilham a política de memória. A durabilidade dos futuros eventos de negócio será garantida por outbox transacional e reconciliação, não apenas por `after_commit` ou AOF.
 

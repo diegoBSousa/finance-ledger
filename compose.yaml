@@ -158,6 +158,15 @@ services:
       redis:
         condition: service_healthy
 
+  balance-projector:
+    <<: *php
+    command: ["php", "artisan", "balances:project", "--sleep=1", "--max-time=3600"]
+    restart: unless-stopped
+    stop_grace_period: 70s
+    depends_on:
+      mysql:
+        condition: service_healthy
+
   frontend:
     image: node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
