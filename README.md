@@ -1,9 +1,15 @@
-# Finance Ledger — etapa 02
+# Finance Ledger — etapa 03
 
-Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão acrescenta o núcleo contábil à base de desenvolvimento da etapa 01.
+Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão acrescenta o modelo persistente e o repositório de contas ao núcleo contábil.
 
 ## Implementado até esta etapa
 
+- Nove tabelas financeiras com índices, FKs e CHECKs: contas, lançamentos, partidas, projeções, revisões, importações, resultados de linhas e outbox.
+- Unicidade do hash por titular e chaves compostas que impedem vínculos de partidas com contas/lançamentos de outro proprietário.
+- `MysqlAccountRepository` registrado no container; `AccountRecord::toData()` entrega DTOs próprios, preservando identificadores como strings.
+- Seed repetível das contas financeiras #100–#999 e duas contrapartidas, com usuário de demonstração explícito e senha Argon2id.
+- Provisionamento transacional de conta, estado e projeção inicialmente zerada; seed preserva dados existentes e recusa conflitos de titularidade.
+- 58 testes de integração executados em MySQL 8.4, incluindo os mesmos contratos do double, constraints, rollback, seeds e reversão/reaplicação das migrations.
 - Domínio imutável: `Money`, contas, tipos contábeis, partidas e lançamentos balanceados; centavos exatos com proteção contra overflow de 64 bits.
 - Receita debita a conta financeira e credita receitas; despesa debita despesas e credita a conta financeira. Saldos de ativo podem ficar negativos.
 - Canonicalização UTF-8/NFC e SHA-256 versionado das linhas interpretadas do CSV, com exemplos de referência fixos.
@@ -21,7 +27,7 @@ Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 
 - PHPUnit, Larastan/PHPStan, Pint, Vitest, Vue Test Utils, ESLint, checagem TypeScript e workflow de CI.
 - Diagnóstico real de infraestrutura: consulta MySQL, publica um job Redis e confere se o worker leu o arquivo privado escrito pela aplicação.
 
-O caso de uso desta etapa **prepara e valida** o lançamento; ainda não grava no banco. Não há adapter MySQL de contas, importação financeira, endpoints financeiros, login/JWT, projeção de saldo, dashboard, outbox ou `balance-projector`. A regra de titularidade já existe no núcleo; o `actorUserId` deverá vir da autenticação ou do contexto confiável da importação, nunca de um ID livre enviado pelo cliente.
+O caso de uso **prepara e valida** o lançamento usando contas reais do MySQL; ainda não grava operações financeiras. As estruturas de saldo, importação e outbox existem, mas seus serviços ainda não foram implementados. Login/JWT, endpoints financeiros, postagem transacional, trigger de `staled`, recálculo, importador, dashboard e processos financeiros independentes entram nas próximas etapas. O `actorUserId` deverá vir da autenticação ou do contexto confiável da importação, nunca de um ID livre enviado pelo cliente.
 
 O endpoint operacional público não expõe dados de negócio. O limite exato de 100.000.000 bytes será validado no futuro caso de uso de upload; PHP/Nginx já têm os limites de transporte. A paginação está validada no DTO, e será conectada aos endpoints nas etapas correspondentes.
 
@@ -37,7 +43,9 @@ bash scripts/bootstrap.sh
 bash scripts/check.sh
 ```
 
-O bootstrap gera `.env` com chave e senhas aleatórias, usa seu UID/GID para os arquivos, instala as versões dos lockfiles, inicia MySQL/Redis, aplica as migrations iniciais e inicia os serviços. Por fim, executa o diagnóstico de fila e volume. Ao executar novamente, preserva `.env` e os volumes existentes.
+O bootstrap gera `.env` com chave e senhas aleatórias, usa seu UID/GID para os arquivos, instala as versões dos lockfiles, inicia MySQL/Redis, aplica as migrations, executa o seed e inicia os serviços. Por fim, executa o diagnóstico de fila e volume. Ao executar novamente, preserva configurações e volumes existentes e acrescenta as variáveis de demonstração se estiverem ausentes.
+
+As 900 contas financeiras pertencem ao usuário definido por `DEMO_USER_EMAIL` (padrão `demo@example.test`). A senha inicial fica em `DEMO_USER_PASSWORD`, gerada pelo bootstrap. O seed usa Argon2id e não troca senhas de usuários existentes. Funciona somente em `local`/`testing`; se uma conta do intervalo já pertencer a outra pessoa, aborta e desfaz o seed inteiro. O CSV ainda não é importado e os saldos iniciais são zero.
 
 O primeiro build pode levar alguns minutos. Os serviços ficam disponíveis em:
 
@@ -58,6 +66,8 @@ docker compose logs -f app web worker
 docker compose exec app php artisan route:list
 docker compose exec app composer test
 docker compose run --rm --no-deps app composer test:core
+bash scripts/test-mysql.sh
+docker compose exec app php artisan db:seed --force
 docker compose exec frontend npm run test
 docker compose exec frontend npm run build
 bash scripts/smoke.sh
@@ -94,14 +104,16 @@ docker compose run --rm --no-deps app composer test:core
 
 Esse comando não precisa iniciar MySQL, Redis, worker nem o kernel Laravel. Para execução local com PHP 8.4 e Composer, use `composer install` e `composer test:core` dentro de `backend/`.
 
-`scripts/check.sh` executa validação do Compose, Composer, estilo, análise estática, ambas as suítes PHP, lint/testes/build frontend e diagnóstico com os serviços reais.
+`scripts/check.sh` executa validação do Compose, Composer, estilo, análise estática, as três suítes PHP, lint/testes/build frontend e diagnóstico com os serviços reais. `composer test` mantém as suítes de núcleo e HTTP; a integração MySQL é chamada separadamente pelo script.
 
-Consulte [docs/step-02.md](docs/step-02.md) para os resultados atuais, o exemplo da conta #682 e os limites da validação. O contrato de repositório passou com um double em memória para testes; ele será aplicado ao adapter MySQL na próxima etapa. Unicidade SQL, rollback, triggers e concorrência ainda precisam dos testes de integração correspondentes.
+`bash scripts/test-mysql.sh` inicia `mysql-test` e executa `test-runner` pelo perfil `test`. Esse banco é descartável, usa `tmpfs`, não publica porta e não compartilha o volume de desenvolvimento. A suíte recria somente `finance_ledger_test`, exige `MYSQL_TEST_RESET=1` e recusa configuração em cache. O script para o banco ao terminar. As dependências PHP devem estar instaladas pelo bootstrap.
+
+Consulte [docs/step-03.md](docs/step-03.md) para o schema, os comandos e os resultados: **155 testes backend passaram**, sendo 92 do núcleo, 5 HTTP e 58 no MySQL 8.4.11. Compose e scripts foram validados estaticamente; a execução dos containers permanece pendente no Ubuntu/CI porque o ambiente de implementação não tem daemon Docker. Frontend não foi alterado nesta etapa.
 
 A situação da infraestrutura anterior está em [docs/step-01.md](docs/step-01.md). A configuração de CI está incluída, mas não foi enviada a um repositório remoto nem executada no GitHub.
 
 ## Próximo incremento
 
-Implementar as migrations do livro contábil, contas e projeções; seed das 900 contas com titularidade explícita; adapter MySQL de `AccountRepository` e execução do mesmo contrato contra o banco real. Depois entram autenticação JWT, postagem transacional e atualização dos saldos, seguindo o plano aprovado.
+Implementar autenticação JWT, login/logout com revogação durável, usuário atual e autorização na API. Depois vêm postagem transacional, trigger de invalidação e recálculo de saldos, seguindo o plano aprovado.
 
 As separações arquiteturais estão em [docs/architecture.md](docs/architecture.md), e as regras do teste estão em [docs/decisions.md](docs/decisions.md).

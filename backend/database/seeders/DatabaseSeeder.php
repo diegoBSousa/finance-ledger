@@ -14,6 +14,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Account ownership and the demo user will be introduced with the ledger schema.
+        $this->call(DemoAccountsSeeder::class);
     }
 }

@@ -5,7 +5,7 @@ x-php: &php
     dockerfile: docker/php/Dockerfile
   user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
   working_dir: /var/www/html
-  environment:
+  environment: &php-environment
     LOCAL_UID: ${LOCAL_UID:-1000}
     LOCAL_GID: ${LOCAL_GID:-1000}
     APP_NAME: ${APP_NAME:-Finance Ledger}
@@ -38,6 +38,8 @@ x-php: &php
     FILESYSTEM_DISK: local
     MAIL_MAILER: log
     CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-demo@example.test}
+    DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
   volumes:
     - ./backend:/var/www/html
     - uploads:/var/www/html/storage/app/private/uploads
@@ -89,6 +91,44 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+
+  mysql-test:
+    profiles: [test]
+    image: mysql:8.4@sha256:0744ee5ef89ce6ccfa13de3e579fe6b9e27f93dd70da9c06d2c908b1b193fb8d
+    environment:
+      MYSQL_DATABASE: finance_ledger_test
+      MYSQL_USER: ledger_test
+      MYSQL_PASSWORD: disposable-test-password
+      MYSQL_ROOT_PASSWORD: disposable-test-root-password
+    tmpfs:
+      - /var/lib/mysql:size=1g
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql --host=127.0.0.1 --user=$$MYSQL_USER --database=$$MYSQL_DATABASE --silent --execute='SELECT 1'"]
+      start_period: 30s
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  test-runner:
+    <<: *php
+    profiles: [test]
+    environment:
+      <<: *php-environment
+      APP_ENV: testing
+      DB_HOST: mysql-test
+      DB_DATABASE: finance_ledger_test
+      DB_USERNAME: ledger_test
+      DB_PASSWORD: disposable-test-password
+      MYSQL_TEST_RESET: 1
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      LOG_CHANNEL: stderr
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      mysql-test:
+        condition: service_healthy
+    command: ["composer", "test:integration"]
 
   redis:
     image: redis:8.2-alpine@sha256:5517128c78ca95f28f7dc6a90e2f808f35f01a4a01c2c20e514571b4d9706275

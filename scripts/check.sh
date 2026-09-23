@@ -7,6 +7,7 @@ docker compose exec -T app composer validate --strict
 docker compose exec -T app composer lint
 docker compose exec -T app composer analyse
 docker compose exec -T app composer test
+bash scripts/test-mysql.sh
 docker compose exec -T frontend npm run lint
 docker compose exec -T frontend npm run test
 docker compose exec -T frontend npm run build
