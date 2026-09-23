@@ -26,6 +26,19 @@ if grep -Eq '^(APP_KEY|DB_PASSWORD|MYSQL_ROOT_PASSWORD)=$' .env; then
     exit 1
 fi
 
+# Upgrading an earlier increment preserves existing secrets and adds a demo password once.
+if ! grep -q '^DEMO_USER_EMAIL=' .env; then
+    printf '\nDEMO_USER_EMAIL=demo@example.test\n' >> .env
+fi
+if ! grep -q '^DEMO_USER_PASSWORD=.' .env; then
+    demo_password="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
+    if grep -q '^DEMO_USER_PASSWORD=' .env; then
+        sed -i "s|^DEMO_USER_PASSWORD=.*|DEMO_USER_PASSWORD=${demo_password}|" .env
+    else
+        printf 'DEMO_USER_PASSWORD=%s\n' "$demo_password" >> .env
+    fi
+fi
+
 docker compose config --quiet
 mkdir -p backend/bootstrap/cache backend/storage/framework/{cache/data,sessions,views,testing} backend/storage/logs
 docker compose build app
@@ -35,6 +48,7 @@ docker compose run --rm --no-deps app composer install --no-interaction --prefer
 docker compose run --rm --no-deps frontend npm ci
 docker compose up -d --wait --wait-timeout 180 mysql redis
 docker compose run --rm --no-deps app php artisan migrate --force
+docker compose run --rm --no-deps app php artisan db:seed --force
 docker compose up -d --wait --wait-timeout 120
 bash scripts/smoke.sh
 

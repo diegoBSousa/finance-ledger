@@ -11,7 +11,7 @@ use App\Domain\Shared\DomainViolation;
 use PHPUnit\Framework\TestCase;
 use Tests\Core\Support\Accounts;
 
-/** Reuse these expectations with the MySQL adapter in the persistence stage. */
+/** Shared expectations for the in-memory double and the real MySQL adapter. */
 abstract class AccountRepositoryContract extends TestCase
 {
     /** @param list<AccountData> $accounts */

@@ -1,6 +1,6 @@
 # Arquitetura e fronteiras
 
-A etapa 02 acrescenta as camadas de domínio e aplicação à composição técnica inicial. A preparação de um lançamento já pode ser executada sem Laravel; a persistência financeira entra no próximo incremento.
+A etapa 03 conecta o núcleo contábil ao repositório MySQL de contas e cria o modelo persistente. A preparação de um lançamento continua testável sem Laravel. A gravação de operações financeiras entra depois da autenticação.
 
 ## Direção das dependências
 
@@ -13,7 +13,7 @@ A etapa 02 acrescenta as camadas de domínio e aplicação à composição técn
 
 Controllers de negócio fazem validação de transporte, constroem RequestDTOs e chamam casos de uso injetados. Os casos de uso retornam ResponseDTOs próprios. Nenhum contrato interno recebe `Request`, `UploadedFile`, `Model`, `Collection`, `Paginator`, `Carbon` ou tipos da biblioteca JWT.
 
-`Account`, `Posting` e `JournalEntry` implementam `toData()` retornando DTOs imutáveis de `Domain/Accounting/Data`. Assim, as entidades não dependem da camada Application nem de um formato HTTP. O caso de uso envolve `JournalEntryData` em seu próprio ResponseDTO. Os futuros records Eloquent também terão mapeamento explícito para DTOs próprios; os repositórios não expõem entidades ou models.
+`Account`, `Posting` e `JournalEntry` implementam `toData()` retornando DTOs imutáveis de `Domain/Accounting/Data`. Assim, as entidades não dependem da camada Application nem de um formato HTTP. O caso de uso envolve `JournalEntryData` em seu próprio ResponseDTO. `Infrastructure/Persistence/Models/AccountRecord` também implementa `toData()`, com casts de identificadores para strings; o repositório não expõe models.
 
 Inserções em lote terão adapters próprios e não dependerão de eventos individuais dos models.
 
@@ -21,9 +21,13 @@ Inserções em lote terão adapters próprios e não dependerão de eventos indi
 
 `PrepareCsvPostingRequest` contém o ator confiável e os quatro campos já interpretados de uma linha CSV. `PrepareCsvPostingUseCase` canonicaliza a linha, pede a conta financeira ao `AccountRepository`, confere a titularidade, resolve a conta técnica e constrói o agregado balanceado. A resposta contém dados próprios: hash, texto canônico, descrição original para auditoria e `JournalEntryData` com duas partidas.
 
-O caso de uso não grava operações, publica eventos ou reserva hashes. Na etapa de persistência, a unicidade precisa ser garantida pela restrição MySQL e pela mesma transação que confirma a operação. O hash calculado aqui, sozinho, não oferece idempotência transacional.
+O caso de uso não grava operações, publica eventos ou reserva hashes. Já existe `UNIQUE(owner_user_id, source_row_hash)` no MySQL. A etapa de postagem usará essa restrição na mesma transação que confirma cabeçalho, partidas e evento. O hash calculado sozinho não oferece idempotência transacional.
 
-`AccountRepository` é somente uma porta de leitura. Seu double está em `tests/Doubles`, e não é registrado no container Laravel. O teste abstrato `AccountRepositoryContract` define as expectativas que serão reutilizadas pelo adapter MySQL.
+`AccountRepository` é somente uma porta de leitura. Seu double está em `tests/Doubles`; `MysqlAccountRepository` é a implementação registrada no container Laravel. Ambos herdam os mesmos testes de `AccountRepositoryContract`. Nenhuma interface foi ampliada para acomodar métodos de Eloquent.
+
+`AccountProvisioner` é uma operação de infraestrutura utilizada pelos seeds. Em uma transação, verifica o usuário, serializa o provisionamento daquele titular e cria estado, conta e projeção. Não é um caso de uso HTTP nem permite criar implicitamente contas durante a importação. Um futuro fluxo de criação de conta terá seu próprio caso de uso/contrato quando existir essa necessidade.
+
+As migrations são específicas de MySQL 8.4/InnoDB. FKs compostas preservam proprietário/moeda entre cabeçalho, partidas e contas. CHECKs validam valores e estados de uma linha; o balanceamento do agregado continua no domínio e será persistido atomicamente. Não há trigger de invalidação nesta etapa. O schema completo e os limites estão em [step-03.md](step-03.md).
 
 `phpunit.core.xml` usa um bootstrap que bloqueia o autoload de Laravel, Carbon e adapters. `ArchitectureTest` inspeciona nomes resolvidos na árvore de sintaxe e permite apenas dependências internas na direção correta e recursos nativos do PHP. Também verifica que as assinaturas do repositório expõem escalares, enums e DTOs readonly. O parser utilizado nessa verificação é uma dependência exclusiva de desenvolvimento.
 
