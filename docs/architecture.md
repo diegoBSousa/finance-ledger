@@ -1,6 +1,6 @@
 # Arquitetura e fronteiras
 
-A etapa 03 conecta o núcleo contábil ao repositório MySQL de contas e cria o modelo persistente. A preparação de um lançamento continua testável sem Laravel. A gravação de operações financeiras entra depois da autenticação.
+A etapa 04 acrescenta autenticação à API sobre o modelo persistente. O núcleo contábil e os casos de uso de autenticação continuam testáveis sem Laravel. A gravação de operações financeiras entra no próximo incremento.
 
 ## Direção das dependências
 
@@ -34,6 +34,18 @@ As migrations são específicas de MySQL 8.4/InnoDB. FKs compostas preservam pro
 BRL é a única moeda representável pelo enum `Currency`; códigos não suportados são rejeitados na conversão dos dados. Adicionar moedas exige rever as invariantes de aritmética e de balanceamento por moeda antes de ampliar esse enum.
 
 `HealthController` é uma verificação operacional sem entrada ou comportamento de negócio; não cria um caso de uso fictício. `CheckInfrastructure` e `ProbeSharedUploadJob` também pertencem à borda técnica. Não servem como modelo para transportar classes Laravel pelas futuras interfaces de domínio/aplicação.
+
+## Autenticação
+
+`LoginController` valida o transporte por `LoginFormRequest`, instancia `LoginRequest`, chama `LoginUseCase` e apresenta seu DTO. O caso de uso consulta `UserRepository`, verifica a senha por `PasswordHasher` e emite o token por `TokenService`. Hash, Laravel e `lcobucci/jwt` ficam nos adapters. Os demais controllers seguem a mesma fronteira.
+
+O middleware `jwt.auth` aceita somente o header `Authorization: Bearer ...`, chama `AuthenticateTokenUseCase` e coloca `AuthenticationData` nos atributos internos da requisição. Esse caso de uso valida o token, consulta a revogação MySQL e carrega o usuário atual. Controllers usam `AuthenticatedContext::fromRequest()`; IDs, claims ou objetos enviados no corpo/query não substituem esse contexto. Não existe fallback de autenticação por sessão/cookie.
+
+O logout grava o identificador aleatório do token e sua expiração em `revoked_tokens`. Não grava o JWT completo nem depende do Redis. Uma falha nessa persistência não retorna sucesso; uma falha ao consultar revogação não libera acesso. O comando de limpeza remove apenas registros de tokens já expirados. Requisições que já passaram pela autenticação antes do logout podem concluir; requisições seguintes são recusadas.
+
+O contrato `Clock` expõe segundos como inteiro; o adapter da biblioteca converte para PSR Clock/DateTime internamente. O teste de arquitetura agora verifica todos os contratos de Application, incluindo os de autenticação. Os contracts de usuário e revogação são executados contra os doubles e os adapters reais.
+
+O contexto autenticado já foi integrado ao caso de uso que prepara uma linha CSV, em teste MySQL, verificando a recusa de conta alheia. Os endpoints de importação e consultas financeiras ainda serão implementados e deverão usar esse mesmo contexto, com filtro por titular e paginação de no máximo 10 itens. Detalhes do protocolo estão em [step-04.md](step-04.md).
 
 ## Processos
 

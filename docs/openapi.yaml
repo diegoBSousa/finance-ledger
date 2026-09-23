@@ -1,0 +1,187 @@
+openapi: 3.1.0
+info:
+  title: Finance Ledger API
+  version: 0.4.0
+  description: >-
+    Endpoints operacionais e de autenticação implementados até a etapa 04.
+    JWT de 900 segundos, sem refresh; logout revoga somente o token apresentado.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Desenvolvimento local
+paths:
+  /health:
+    get:
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: Aplicação HTTP inicializada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status: {type: string, const: ok}
+                  service: {type: string, const: finance-ledger-api}
+  /auth/login:
+    post:
+      operationId: login
+      security: []
+      description: >-
+        Até 5 tentativas por e-mail/IP e 30 por IP a cada minuto, incluindo sucessos.
+        E-mail é normalizado; espaços da senha são preservados.
+        Respostas usam Cache-Control no-store e não criam cookies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: {type: string, format: email, maxLength: 254}
+                password:
+                  type: string
+                  format: password
+                  minLength: 1
+                  maxLength: 1024
+                  description: Até 1024 bytes UTF-8; bytes nulos não são permitidos.
+      responses:
+        '200':
+          description: Credenciais válidas
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [access_token, token_type, expires_in, user]
+                    properties:
+                      access_token: {type: string}
+                      token_type: {type: string, const: Bearer}
+                      expires_in: {type: integer, const: 900}
+                      user: {$ref: '#/components/schemas/User'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422':
+          description: Campos inválidos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, errors]
+                properties:
+                  message: {type: string}
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items: {type: string}
+        '429':
+          description: Limite de tentativas excedido
+          headers:
+            Retry-After:
+              description: Segundos até poder tentar novamente
+              schema: {type: integer, minimum: 0}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {message: 'Too many login attempts. Please try again later.', code: rate_limited}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /auth/me:
+    get:
+      operationId: currentUser
+      security: [{bearerAuth: []}]
+      description: Identidade atual do titular do JWT, consultada no MySQL.
+      responses:
+        '200':
+          description: Perfil público
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/User'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /auth/logout:
+    post:
+      operationId: logout
+      security: [{bearerAuth: []}]
+      description: >-
+        Confirma somente depois de persistir a revogação no MySQL.
+        Outros tokens permanecem válidos. Repetir com o token revogado retorna 401.
+        Não aceita um token alvo no corpo.
+      responses:
+        '200':
+          description: Token autenticado revogado
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [revoked]
+                    properties:
+                      revoked: {type: boolean, const: true}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Header Authorization com JWT HS256 emitido pelo login.
+  headers:
+    NoStore:
+      schema: {type: string, example: 'no-store, private'}
+  schemas:
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, name, email]
+      properties:
+        id: {type: string, pattern: '^[1-9][0-9]*$', example: '1'}
+        name: {type: string, example: Demo Ledger}
+        email: {type: string, format: email, example: demo@example.test}
+    Error:
+      type: object
+      required: [message, code]
+      properties:
+        message: {type: string}
+        code:
+          type: string
+          enum: [invalid_credentials, unauthenticated, rate_limited, authentication_unavailable]
+  responses:
+    Unauthorized:
+      description: Credenciais inválidas ou token ausente, inválido, expirado ou revogado
+      headers:
+        WWW-Authenticate:
+          schema: {type: string, const: Bearer}
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          examples:
+            credentials:
+              value: {message: 'Invalid email or password.', code: invalid_credentials}
+            token:
+              value: {message: 'Unauthenticated.', code: unauthenticated}
+    Unavailable:
+      description: Configuração de assinatura ou persistência de autenticação indisponível
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {message: 'Authentication is temporarily unavailable.', code: authentication_unavailable}

@@ -13,7 +13,8 @@
         "ext-intl": "*",
         "ext-pdo_mysql": "*",
         "ext-redis": "*",
-        "laravel/framework": "^13.17"
+        "laravel/framework": "^13.17",
+        "lcobucci/jwt": "^5.6"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

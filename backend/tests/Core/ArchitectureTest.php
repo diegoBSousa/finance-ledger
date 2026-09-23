@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Core;
 
-use App\Application\Accounting\Contracts\AccountRepository;
 use PhpParser\Node\Name;
 use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
@@ -65,22 +64,29 @@ final class ArchitectureTest extends TestCase
             return (new ReflectionFunction($name))->isInternal();
         }
 
-        return in_array($name, ['PHP_INT_SIZE', 'PHP_INT_MIN', 'PHP_INT_MAX', 'JSON_UNESCAPED_UNICODE', 'JSON_UNESCAPED_SLASHES', 'JSON_THROW_ON_ERROR'], true);
+        return in_array($name, ['PHP_INT_SIZE', 'PHP_INT_MIN', 'PHP_INT_MAX', 'JSON_UNESCAPED_UNICODE', 'JSON_UNESCAPED_SLASHES', 'JSON_THROW_ON_ERROR', 'FILTER_VALIDATE_EMAIL'], true);
     }
 
     public function test_repository_boundaries_expose_only_scalars_enums_and_readonly_data(): void
     {
-        $contract = new ReflectionClass(AccountRepository::class);
+        $root = dirname(__DIR__, 2).'/app/Application';
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root)) as $file) {
+            if (! $file->isFile() || $file->getExtension() !== 'php' || ! str_contains($file->getPathname(), '/Contracts/')) {
+                continue;
+            }
+            $relative = substr($file->getPathname(), strlen($root) + 1, -4);
+            $contract = new ReflectionClass('App\\Application\\'.str_replace('/', '\\', $relative));
+            self::assertTrue($contract->isInterface());
+            foreach ($contract->getMethods() as $method) {
+                $types = [$method->getReturnType(), ...array_map(fn ($parameter) => $parameter->getType(), $method->getParameters())];
 
-        foreach ($contract->getMethods() as $method) {
-            $types = [$method->getReturnType(), ...array_map(fn ($parameter) => $parameter->getType(), $method->getParameters())];
+                foreach ($types as $type) {
+                    self::assertInstanceOf(ReflectionNamedType::class, $type);
 
-            foreach ($types as $type) {
-                self::assertInstanceOf(ReflectionNamedType::class, $type);
-
-                if (! $type->isBuiltin()) {
-                    $class = new ReflectionClass($type->getName());
-                    self::assertTrue($class->isEnum() || ($class->isReadOnly() && str_ends_with($class->getShortName(), 'Data')));
+                    if (! $type->isBuiltin()) {
+                        $class = new ReflectionClass($type->getName());
+                        self::assertTrue($class->isEnum() || ($class->isReadOnly() && str_ends_with($class->getShortName(), 'Data')));
+                    }
                 }
             }
         }

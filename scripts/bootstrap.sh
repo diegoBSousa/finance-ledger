@@ -39,6 +39,15 @@ if ! grep -q '^DEMO_USER_PASSWORD=.' .env; then
     fi
 fi
 
+if ! grep -q '^JWT_SECRET=.' .env; then
+    jwt_secret="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+    if grep -q '^JWT_SECRET=' .env; then
+        sed -i "s|^JWT_SECRET=.*|JWT_SECRET=${jwt_secret}|" .env
+    else
+        printf '\nJWT_SECRET=%s\n' "$jwt_secret" >> .env
+    fi
+fi
+
 docker compose config --quiet
 mkdir -p backend/bootstrap/cache backend/storage/framework/{cache/data,sessions,views,testing} backend/storage/logs
 docker compose build app
