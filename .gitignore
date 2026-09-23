@@ -1,0 +1,11 @@
+/.env
+/backend/.env
+/backend/vendor/
+/backend/.phpunit.cache/
+/backend/.phpunit.result.cache
+/backend/.phpstan-cache/
+/frontend/node_modules/
+/frontend/dist/
+/frontend/coverage/
+*.log
+.DS_Store
