@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Storage;
 
+use App\Application\Imports\ChunkLimits;
 use App\Application\Imports\Contracts\ImportFileStorage;
 use App\Application\Imports\Data\StoredImportFileData;
 use App\Application\Imports\Data\ValidatedImportFileData;
@@ -101,12 +102,22 @@ final readonly class LocalImportFileStorage implements ImportFileStorage
                 throw new InvalidImportFile('source_file_changed');
             }
             $hash = hash_init('sha256');
+            $blocks = [];
+            $block = '';
             while (! feof($input)) {
-                $buffer = fread($input, 1048576);
+                $buffer = fread($input, ChunkLimits::INTEGRITY_BLOCK_BYTES - strlen($block));
                 if ($buffer === false) {
                     throw new ImportUnavailable;
                 }
                 hash_update($hash, $buffer);
+                $block .= $buffer;
+                if (strlen($block) === ChunkLimits::INTEGRITY_BLOCK_BYTES) {
+                    $blocks[] = hash('sha256', $block);
+                    $block = '';
+                }
+            }
+            if ($block !== '') {
+                $blocks[] = hash('sha256', $block);
             }
             if (! hash_equals($file->checksum, hash_final($hash))) {
                 throw new InvalidImportFile('source_file_changed');
@@ -126,7 +137,7 @@ final readonly class LocalImportFileStorage implements ImportFileStorage
                 throw new InvalidImportFile('invalid_csv_header');
             }
 
-            return new ValidatedImportFileData($offset);
+            return new ValidatedImportFileData($offset, $blocks);
         } catch (InvalidImportFile $error) {
             throw $error;
         } catch (\Throwable) {

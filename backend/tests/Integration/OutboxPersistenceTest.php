@@ -81,7 +81,7 @@ final class OutboxPersistenceTest extends TestCase
     public function test_unimplemented_consumers_remain_durable_and_are_not_published(): void
     {
         $repo = $this->prepare();
-        DB::table('outbox_deliveries')->update(['consumer' => 'csv-importer']);
+        DB::table('outbox_deliveries')->update(['consumer' => 'dashboard-cache-invalidator']);
         self::assertCount(0, $repo->claim()->deliveries);
         self::assertSame('pending', DB::table('outbox_deliveries')->value('status'));
     }

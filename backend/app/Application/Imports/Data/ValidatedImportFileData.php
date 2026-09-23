@@ -6,5 +6,6 @@ namespace App\Application\Imports\Data;
 
 final readonly class ValidatedImportFileData
 {
-    public function __construct(public int $headerOffset) {}
+    /** @param list<string> $blockHashes */
+    public function __construct(public int $headerOffset, public array $blockHashes = []) {}
 }

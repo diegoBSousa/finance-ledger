@@ -15,12 +15,13 @@ final class RedisOutboxPublisher implements OutboxPublisher
 {
     public function publish(OutboxDeliveryData $delivery): void
     {
-        if (DB::transactionLevel() !== 0 || $delivery->consumer !== 'import-preparer') {
+        if (DB::transactionLevel() !== 0 || ! in_array($delivery->consumer, ['import-preparer', 'csv-importer'], true)) {
             throw new PublicationUnavailable;
         }
         try {
             // Publish immediately after the relay's claim commit, never via deferred afterCommit callbacks.
-            Queue::connection('outbox')->push(new PrepareImportJob($delivery->id), '', 'imports');
+            $job = $delivery->consumer === 'import-preparer' ? new PrepareImportJob($delivery->id) : new ProcessImportChunkJob($delivery->id);
+            Queue::connection('outbox')->push($job, '', 'imports');
         } catch (Throwable) {
             throw new PublicationUnavailable;
         }

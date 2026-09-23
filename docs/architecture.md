@@ -1,6 +1,6 @@
 # Arquitetura e fronteiras
 
-A etapa 07 acrescenta upload privado, acompanhamento, relay recuperável e preparação inicial do CSV. O núcleo contábil e os casos de uso continuam testáveis sem Laravel; os adapters MySQL implementam locks, transações e outbox.
+A etapa 08 acrescenta processamento financeiro por chunks com checkpoint, resultados por linha e retomada idempotente. O núcleo contábil e os casos de uso continuam testáveis sem Laravel; os adapters MySQL implementam locks, transações e outbox.
 
 ## Direção das dependências
 
@@ -41,7 +41,7 @@ Cada lote tem um titular autenticado e até 500 operações. O escritor bloqueia
 
 A deduplicação usa leitura bloqueante atual, inclusive dentro de uma transação externa com snapshot anterior. Novas operações produzem duas partidas; duplicatas não produzem invalidação ou eventos. O trigger apenas mantém metadados: agregações e publicação Redis ficam fora dele. Uma falha em qualquer escrita desfaz o lote e os efeitos dos triggers.
 
-As conexões MySQL limitam a espera InnoDB a 5 segundos. O adapter tenta até três vezes quando gerencia a transação externa; se for chamado dentro da transação de um futuro importador, o chamador precisa desfazer e retentar o lote externo após uma falha de concorrência. O retorno do repositório só é durável depois do commit externo.
+As conexões MySQL limitam a espera InnoDB a 5 segundos. O adapter tenta até três vezes quando gerencia a transação externa; quando chamado dentro da transação do importador, o chamador precisa desfazer e retentar o lote externo após uma falha de concorrência. O retorno do repositório só é durável depois do commit externo.
 
 ## Consulta e projeção de saldos
 
@@ -75,7 +75,21 @@ Importação, `ImportRequested` e entrega `import-preparer` são confirmados na 
 
 O worker chama `PrepareImportUseCase`, que obtém posse temporária da importação, valida tamanho/checksum/cabeçalho em streaming e confirma `prepared_at`, offset após o cabeçalho, evento `ImportChunkRequested` e confirmação da entrega original juntos. A gravação revalida token de posse e expiração sob lock. Arquivo inválido termina como `failed`; falha técnica libera a própria posse e permite nova tentativa. Essa preparação não interpreta registros financeiros nem altera saldos.
 
-Uma importação preparada permanece `pending` nesta versão, com contadores zero. O hash integral protege a origem; a identidade financeira continua sendo o hash canônico de cada registro por titular. Dois uploads iguais criam dois acompanhamentos, e a futura importação reutilizará a idempotência transacional já implementada na postagem. Protocolo, limites e exemplos estão em [step-07.md](step-07.md).
+Uma importação preparada fica `pending` até o primeiro chunk ser assumido. O hash integral protege a origem; a identidade financeira continua sendo o hash canônico de cada registro por titular. Dois uploads iguais criam dois acompanhamentos, e o processamento reutiliza a idempotência transacional da postagem. O protocolo de upload está em [step-07.md](step-07.md).
+
+## Processamento dos chunks
+
+`ProcessImportChunkUseCase` obtém `ImportChunkSourceData` por `ImportChunkRepository::claim()`, lê registros por `CsvChunkReader`, resolve as contas em lote por `ImportAccountRepository` e prepara as linhas com o caso de uso contábil existente. `ResolvedImportAccounts` adapta o snapshot de DTOs ao contrato `AccountRepository`; não conserva dados entre jobs. Contas inativas, alheias, inexistentes e linhas inválidas geram resultados rejeitados. A persistência revalida as contas sob lock antes de lançar.
+
+O leitor usa seek no checkpoint e memória limitada: até 500 registros, pausa após atingir 1 MiB ou dois segundos de leitura, sempre em uma fronteira completa. Registros maiores que 64 KiB são erros estruturais; descrições acima de 16 KiB são rejeições de linha. O delimitador é vírgula, as aspas são duplicadas dentro de campos delimitados e barras invertidas são literais. LF/CRLF e campos multilinha são suportados. O parser valida o enquadramento antes de chamar `str_getcsv()` com escape vazio.
+
+A preparação inicial persiste hashes SHA-256 de blocos de 1 MiB em `imports.file_block_hashes`, além do checksum integral. Cada trecho consumido pelo leitor vem de um bloco conferido contra esse manifesto. O bloco que contém o offset é lido por inteiro, mas os blocos anteriores não são percorridos novamente. Arquivos preparados antes da migration recebem o manifesto por uma verificação integral única no primeiro chunk confirmado. O tamanho de bloco e o algoritmo compõem o contrato persistido dessa versão.
+
+`MysqlImportChunkRepository` gerencia uma transação própria para confirmar o lote. Bloqueia entrega/importação, revalida posse e geração, chama `JournalRepository` na mesma conexão/transação, grava `import_rows`, contadores, offset e geração seguinte, e cria a próxima intenção pela outbox. Somente então confirma a entrega atual. O journal preserva sua ordem de locks por titular, projeções e contas. Nenhuma publicação Redis ocorre dentro dessa transação.
+
+Um rollback desfaz também os efeitos dos triggers, resultados e checkpoint; commits anteriores permanecem. Geração já concluída ou importação terminal apenas confirma a entrega repetida. Uma posse expirada não pode gravar nem liberar a reserva de outro processo. `chunk_attempts` registra até cinco execuções por geração, inclusive reservas abandonadas; sucesso reinicia o contador para a próxima. Erros estruturais encerram imediatamente e falhas técnicas liberam a posse para retentar. O esgotamento torna a importação `failed`, preservando o progresso durável.
+
+O último chunk grava `completed` ou `completed_with_errors` e um evento `ImportCompleted`; falhas definitivas de chunk gravam `ImportFailed`. Esses eventos de término não têm consumidores habilitados nesta etapa. Os resultados por registro permanecem em `import_rows`; a API de acompanhamento expõe os contadores. Limites, recuperação e evidências estão em [step-08.md](step-08.md).
 
 ## Publicação e confirmação da outbox
 
@@ -83,7 +97,7 @@ Uma importação preparada permanece `pending` nesta versão, com contadores zer
 
 Aceitação pelo Redis muda a entrega para `published`; apenas o commit do consumidor a torna `acknowledged`. Entregas publicadas há 300 segundos sem confirmação e reservas expiradas ficam elegíveis novamente. Falhas conhecidas de publicação recebem atraso exponencial de 2 a 256 segundos. Escritas do relay comparam status/token, preservando confirmações antecipadas e reservas de outro processo. Uma resposta SQL perdida depois de publicar não vira confirmação fictícia nem apaga a intenção durável.
 
-O protocolo admite entregas repetidas. A idempotência da preparação, os locks e a posse revalidada impedem gerar mais de uma intenção inicial de chunk. O relay atual atende somente `import-preparer`; `csv-importer` e `dashboard-cache-invalidator` ficam pendentes até seus consumidores serem implementados. Não há confirmação automática de eventos sem handler.
+O protocolo admite entregas repetidas. A idempotência da preparação, os locks e a posse revalidada impedem gerar mais de uma intenção inicial de chunk. O relay atende `import-preparer` e `csv-importer`; `dashboard-cache-invalidator` aguarda o próximo incremento. Não há confirmação automática de eventos sem handler.
 
 ## Processos
 

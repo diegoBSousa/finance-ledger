@@ -21,7 +21,7 @@ final class MysqlOutboxRepository implements OutboxRepository
         }
         try {
             return DB::transaction(function (): ClaimedDeliveriesData {
-                $rows = DB::table('outbox_deliveries')->where('consumer', 'import-preparer')->where(function ($query): void {
+                $rows = DB::table('outbox_deliveries')->whereIn('consumer', ['import-preparer', 'csv-importer'])->where(function ($query): void {
                     $query->where(fn ($q) => $q->whereIn('status', ['pending', 'published'])->where('available_at', '<=', DB::raw('CURRENT_TIMESTAMP(6)')))
                         ->orWhere(fn ($q) => $q->where('status', 'publishing')->where('lease_expires_at', '<=', DB::raw('CURRENT_TIMESTAMP(6)')));
                 })->orderBy('id')->limit(10)->lock('FOR UPDATE SKIP LOCKED')->get();

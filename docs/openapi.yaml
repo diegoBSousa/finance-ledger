@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
   title: Finance Ledger API
-  version: 0.7.0
+  version: 0.8.0
   description: >-
-    Endpoints operacionais, autenticação, saldos, upload e acompanhamento até a etapa 07.
+    Endpoints operacionais, autenticação, saldos, upload e acompanhamento até a etapa 08.
     JWT de 900 segundos, sem refresh; logout revoga somente o token apresentado.
-    O worker prepara o CSV; a leitura financeira por chunks será implementada na próxima etapa.
+    O worker prepara o CSV e processa chunks de até 500 registros com checkpoints idempotentes.
 servers:
   - url: http://localhost:8080/api/v1
     description: Desenvolvimento local
@@ -353,9 +353,10 @@ components:
           type: string
           enum: [pending, processing, completed, completed_with_errors, failed]
           description: >-
-            Na etapa 07, pending inclui arquivo preparado aguardando o consumidor de chunks;
-            failed registra falha definitiva de preparação. Os demais estados serão usados
-            pelo processamento financeiro, ainda não implementado no leitor de arquivos.
+            pending aguarda preparação/primeiro chunk; processing indica processamento iniciado,
+            incluindo espera por retentativa; completed termina sem rejeições;
+            completed_with_errors termina com registros rejeitados; failed encerra por falha
+            estrutural/integridade ou tentativas esgotadas. Lotes anteriores continuam confirmados.
         processed_rows: {$ref: '#/components/schemas/UnsignedInteger'}
         inserted_rows: {$ref: '#/components/schemas/UnsignedInteger'}
         duplicate_rows: {$ref: '#/components/schemas/UnsignedInteger'}
@@ -371,14 +372,14 @@ components:
         started_at:
           type: [string, 'null']
           format: date-time
-          description: Início do processamento financeiro; permanece null nesta etapa.
+          description: UTC da primeira reserva de um chunk; não significa que esse lote já foi confirmado.
         finished_at:
           type: [string, 'null']
           format: date-time
         error_code:
           type: [string, 'null']
-          description: Código seguro de falha; não expõe mensagens SQL ou caminhos privados.
-          examples: [null, invalid_csv_header, source_file_missing, source_file_changed]
+          description: Código seguro da última falha; pode aparecer durante processing enquanto aguarda nova tentativa.
+          examples: [null, invalid_csv_header, source_file_missing, source_file_changed, malformed_csv, csv_record_too_large, import_chunk_unavailable, import_chunk_attempts_exhausted]
         status_url:
           type: string
           pattern: '^/api/v1/imports/[1-9][0-9]*$'

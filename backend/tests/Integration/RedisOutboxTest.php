@@ -10,7 +10,10 @@ use App\Application\Imports\UploadCsvUseCase;
 use App\Application\Outbox\Contracts\OutboxPublisher;
 use App\Application\Outbox\Contracts\OutboxRepository;
 use App\Application\Outbox\RelayOutboxUseCase;
+use App\Domain\Accounting\AccountKind;
 use App\Infrastructure\Messaging\PrepareImportJob;
+use App\Infrastructure\Messaging\ProcessImportChunkJob;
+use App\Infrastructure\Persistence\AccountProvisioner;
 use App\Infrastructure\Storage\LocalImportFileStorage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -88,7 +91,7 @@ final class RedisOutboxTest extends TestCase
         self::assertSame('acknowledged', DB::table('outbox_deliveries')->where('consumer', 'import-preparer')->value('status'));
         self::assertNotNull(DB::table('imports')->value('prepared_at'));
         self::assertSame(0, DB::table('ledger_entries')->count());
-        self::assertSame(0, $this->app->make(RelayOutboxUseCase::class)->execute()->claimed);
+        self::assertSame(1, $this->app->make(RelayOutboxUseCase::class)->execute()->claimed);
     }
 
     public function test_duplicate_redis_jobs_do_not_duplicate_first_chunk_intent(): void
@@ -128,5 +131,35 @@ final class RedisOutboxTest extends TestCase
         self::assertSame('pending', DB::table('outbox_deliveries')->value('status'));
         self::assertSame('pending', DB::table('imports')->value('status'));
         self::assertSame(1, DB::table('outbox_deliveries')->value('attempts'));
+    }
+
+    public function test_real_redis_executes_chunk_and_recovers_lost_chunk_delivery(): void
+    {
+        $this->prepare();
+        $provisioner = $this->app->make(AccountProvisioner::class);
+        foreach ([AccountKind::Revenue, AccountKind::Expense] as $kind) {
+            $provisioner->create('7', $kind);
+        }
+        $provisioner->create('7', AccountKind::Asset, '682');
+        $this->app->instance(LocalImportFileStorage::class, new LocalImportFileStorage($this->uploadRoot));
+        $relay = $this->app->make(RelayOutboxUseCase::class);
+        $relay->execute();
+        $this->consume();
+        self::assertSame(1, $relay->execute()->published);
+        $lost = Queue::connection('redis')->pop('imports');
+        self::assertNotNull($lost);
+        self::assertStringContainsString(ProcessImportChunkJob::class, $lost->payload()['displayName']);
+        $lost->delete();
+        DB::table('outbox_deliveries')->where('consumer', 'csv-importer')->update(['available_at' => now()->subMinute()]);
+        self::assertSame(1, $relay->execute()->published);
+        $job = Queue::connection('redis')->pop('imports');
+        self::assertNotNull($job);
+        self::assertLessThan(10000, strlen($job->getRawBody()));
+        $job->fire();
+        self::assertSame('completed', DB::table('imports')->value('status'));
+        self::assertSame(1, DB::table('imports')->value('inserted_rows'));
+        self::assertSame(2, DB::table('ledger_entries')->count());
+        self::assertSame('acknowledged', DB::table('outbox_deliveries')->where('consumer', 'csv-importer')->value('status'));
+        self::assertSame(0, $relay->execute()->claimed);
     }
 }
