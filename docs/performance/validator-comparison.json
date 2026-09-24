@@ -1,0 +1,26 @@
+{
+  "workload": {
+    "records": 10000,
+    "bytes": 5000000,
+    "accounts": 900,
+    "chunk_records": 500
+  },
+  "before": {
+    "total_seconds": 42.455,
+    "mean_chunk_ms": 1514.1356286,
+    "mean_queries_per_chunk": 2520.95,
+    "php_peak_bytes": 35651584
+  },
+  "after": {
+    "total_seconds": 21.043482065200806,
+    "mean_chunk_ms": 774.2063797,
+    "mean_queries_per_chunk": 2520.95,
+    "php_peak_bytes": 35651584
+  },
+  "notes": [
+    "One complete 5 MB run per version; not a capacity guarantee.",
+    "The earlier 100 MB run was interrupted by the execution environment and is excluded from complete-run results.",
+    "The after version also fixes the MySQL session timezone.",
+    "This comparison isolates the earlier validation-map investigation. Its after sample predates the read-index migration; the final complete run is in observed-report.json."
+  ]
+}

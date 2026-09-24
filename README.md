@@ -1,8 +1,14 @@
-# Finance Ledger — etapa 10
+# Finance Ledger — etapa 11
 
-Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão conecta as telas Vue de login, dashboard, contas/saldos, extrato, upload e acompanhamento à API protegida por JWT. Inclui testes frontend e uma stack Cypress descartável.
+Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão acrescenta a validação de escala com importação financeira de 100 MB, concorrência, recuperação de workers e medições reproduzíveis. Inclui as telas de negócio, testes frontend e uma stack Cypress descartável.
 
 ## Implementado até esta etapa
+
+- Ensaio completo com 100.000.000 bytes, 200.000 operações, 400.000 partidas e controles independentes por conta.
+- Stack de desempenho isolada, arquivos sintéticos em streaming e métricas de chunks, consultas, memória, locks e leituras HTTP.
+- Cenários de sobreposição, reenvio parcial, interrupção por `SIGKILL` e retomada pelos tempos reais de produção.
+- Preparação das contas uma vez por lote na validação contábil; sessões MySQL em UTC, inclusive com servidor em outro fuso.
+- Índice que cobre filtros/contagem/dashboard e paginação que carrega os textos somente dos dez lançamentos selecionados.
 
 - SPA independente com Vue Router, sessão JWT em memória e expiração/revogação tratadas na interface.
 - Dashboard, contas/saldos e extrato com dinheiro exato em BRL, filtros e páginas de até dez itens.
@@ -98,7 +104,7 @@ O bootstrap gera `.env` com chaves independentes para aplicação/JWT e senhas a
 
 As 900 contas financeiras pertencem ao usuário definido por `DEMO_USER_EMAIL` (padrão `demo@example.test`). A senha inicial fica em `DEMO_USER_PASSWORD`, gerada pelo bootstrap. O seed usa Argon2id e não troca senhas de usuários existentes. Funciona somente em `local`/`testing`; se uma conta do intervalo já pertencer a outra pessoa, aborta e desfaz o seed inteiro. O seed não carrega o CSV e as contas novas começam com saldo zero.
 
-Ao atualizar para a etapa 10, execute o bootstrap: ele aplica eventuais migrations anteriores e reinicia worker, relay e projector para carregar o código novo, mesmo quando a imagem Docker não mudou. Esta etapa não acrescenta migrations; o bootstrap instala também as novas dependências frontend. Preserve `.env` e volumes. O Compose mantém `log_bin_trust_function_creators=1` nos bancos de desenvolvimento/teste, permitindo criar os triggers com o usuário da aplicação.
+Ao atualizar para a etapa 11, execute o bootstrap: ele aplica a nova migration do índice de leitura e reinicia worker, relay e projector para carregar o código novo, mesmo quando a imagem Docker não mudou. A migration substitui um índice por outro que preserva sua ordenação e cobre mais colunas; não altera lançamentos existentes. Os lockfiles não mudaram. Preserve `.env` e volumes. O Compose mantém `log_bin_trust_function_creators=1` nos bancos de desenvolvimento/teste, permitindo criar os triggers com o usuário da aplicação.
 
 O primeiro build pode levar alguns minutos. Os serviços ficam disponíveis em:
 
@@ -127,6 +133,7 @@ docker compose exec app php artisan outbox:relay --once
 docker compose exec frontend npm run test
 docker compose exec frontend npm run build
 bash scripts/smoke.sh
+bash scripts/test-performance.sh
 docker compose stop
 docker compose up -d --wait
 ```
@@ -162,23 +169,25 @@ Esse comando não precisa iniciar MySQL, Redis, worker nem o kernel Laravel. Par
 
 `scripts/check.sh` executa validação do Compose, Composer, estilo, análise estática, as três suítes PHP, lint/testes/build frontend, tipos do Cypress, diagnóstico com os serviços reais e E2E em uma composição descartável separada. `composer test` mantém as suítes de núcleo e HTTP; a integração MySQL/Redis é chamada separadamente pelo script.
 
+O ensaio longo de escala é chamado separadamente por `bash scripts/test-performance.sh`. Usa banco/Redis/volumes próprios e guarda relatórios em `artifacts/performance/`. O modo `--quick` reduz as massas, mas ainda espera os tempos reais de recuperação e não valida os 100 MB. Os detalhes, medições e limites estão em [docs/step-11.md](docs/step-11.md).
+
 `bash scripts/test-mysql.sh` recria `mysql-test` e `redis-test` com `--force-recreate` e executa `test-runner` pelo perfil `test`. Esses serviços são descartáveis, usam `tmpfs`, não publicam portas e não compartilham os volumes de desenvolvimento. A recriação evita reutilizar containers que ainda referenciem uma rede removida entre execuções do Compose. A suíte recria somente `finance_ledger_test`, exige `MYSQL_TEST_RESET=1` e recusa configuração em cache. Os testes Redis exigem `REDIS_TEST_ENABLED=1`, usam prefixos exclusivos e removem somente suas próprias chaves. O script para os dois serviços ao terminar. As dependências PHP devem estar instaladas pelo bootstrap.
 
 Consulte [docs/step-10.md](docs/step-10.md) para as telas, sessão, polling e execução dos novos testes E2E. Veja [docs/step-09.md](docs/step-09.md) para dashboard, cache, extratos, resultados e atualização; [docs/step-08.md](docs/step-08.md) cobre chunks, limites e retomada. O upload está em [docs/step-07.md](docs/step-07.md), os saldos em [docs/step-06.md](docs/step-06.md), a postagem em [docs/step-05.md](docs/step-05.md), autenticação em [docs/step-04.md](docs/step-04.md) e o contrato HTTP em [docs/openapi.yaml](docs/openapi.yaml).
 
-**556 testes backend passaram, com 3345 asserções**, também confirmados pelo log da etapa 09 enviado pelo usuário no Ubuntu:
+**561 testes backend passaram nesta etapa, com 3369 asserções**. A execução anterior no Ubuntu, enviada pelo usuário após a etapa 09, confirmou os 556 testes/3345 asserções existentes naquele momento.
 
 | Suíte | Resultado |
 | --- | --- |
-| Núcleo puro e contratos em memória | 188 testes, 1811 asserções |
-| HTTP/JWT, armazenamento, parser CSV e isolamento | 165 testes, 445 asserções |
-| MySQL 8.4.11, Redis 8.2.1, HTTP real e concorrência | 203 testes, 1089 asserções |
+| Núcleo puro e contratos em memória | 188 testes, 1812 asserções |
+| HTTP/JWT, armazenamento, parser CSV e isolamento | 169 testes, 462 asserções |
+| MySQL 8.4.11, Redis 8.2.1, HTTP real e concorrência | 204 testes, 1095 asserções |
 
 Pint, PHPStan/Larastan nível 6, Composer validate, configuração Compose e sintaxe Bash passaram. A integração usou MySQL e Redis reais e processos PHP independentes. Validou publicação, consumo, perda/republicação de jobs, concorrência, rollback de cada parte do checkpoint e perda da resposta de um commit já confirmado. O CSV fornecido foi importado integralmente e reenviado: 15.000 operações únicas, 30.000 partidas e nenhuma nova operação no reenvio. A consulta da conta #682 confirmou R$ 1.092,09 após recalcular sua projeção.
 
 As novas consultas confirmaram receitas de R$ 36.119.609,74, despesas de R$ 26.709.545,74 e saldo de R$ 9.410.064,00 no dashboard, preservados após reenvio do CSV. Os testes incluem snapshots durante commits concorrentes, autorização e filtros, precisão de 64 bits, Redis indisponível com fallback SQL, invalidação repetida e recuperação após falha da confirmação MySQL. O mesmo contrato do cache passou em memória e no Redis real. O OpenAPI 0.9.0 foi conferido contra as 15 operações HTTP registradas.
 
-O transporte multipart foi exercitado com servidor HTTP PHP 8.4 e `memory_limit=64M`: 100.000.000 bytes aceitos, um byte acima recusado e campos extras/arquivos repetidos rejeitados. Esse cenário verifica upload/preparação. O processamento financeiro completo foi validado com o CSV fornecido; a medição de importação financeira de 100 MB permanece para a etapa de desempenho.
+O transporte multipart foi exercitado com servidor HTTP PHP 8.4 e `memory_limit=64M`: 100.000.000 bytes aceitos, um byte acima recusado e campos extras/arquivos repetidos rejeitados. Na etapa 11, o processamento financeiro completo de 100 MB também foi concluído: 200.000 linhas sintéticas em 825,47 segundos, sem rejeições, com pico PHP de 34 MiB por chunk financeiro, igual ao observado na massa de 5 MB. As linhas têm aproximadamente 500 bytes; esses tempos não estimam arquivos com milhões de linhas mais curtas.
 
 Na etapa 10, **44 testes frontend**, lint, TypeScript, build, tipos Cypress, Bash e configuração Compose passaram. Um ensaio integrado dos componentes Vue em jsdom, com HTTP, MySQL, Redis e workers reais, também passou com o CSV de 15 mil registros, recálculo de saldo, reenvios parciais e revogação do token.
 
@@ -192,6 +201,6 @@ A situação da infraestrutura anterior está em [docs/step-01.md](docs/step-01.
 
 ## Próximo incremento
 
-Validar a escala: importação financeira completa de 100 MB, concorrência sustentada, memória, retomada e consultas com EXPLAIN, conforme a próxima etapa do plano aprovado.
+Consolidar a documentação e o roteiro de demonstração, conferir a instalação limpa e fechar a validação de navegador no Ubuntu/CI para preparar o entregável final, conforme a etapa 14 do plano aprovado.
 
 As separações arquiteturais estão em [docs/architecture.md](docs/architecture.md), e as regras do teste estão em [docs/decisions.md](docs/decisions.md).

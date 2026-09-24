@@ -60,9 +60,7 @@ final readonly class MysqlJournalRepository implements JournalRepository
             }
             $accounts[] = $record->toData();
         }
-        foreach ($batch->entries as $entry) {
-            $this->validator->validate($entry, $accounts);
-        }
+        $this->validator->validateBatch($batch->entries, $accounts);
 
         $results = [];
         $insertedIds = [];

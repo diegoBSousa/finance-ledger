@@ -41,9 +41,17 @@ final readonly class MysqlLedgerReadRepository implements LedgerReadRepository
                 $rows->where('movement_type', $query->type);
             }
             $total = (clone $rows)->count();
-            $page = $rows->select('journal_entries.*', 'a.external_number as account_number', 'l.amount_minor')
+            // Find the bounded page using index-covered columns before loading TEXT payloads.
+            // All three reads share the same snapshot, including pages deep in the statement.
+            $ids = (clone $rows)
                 ->orderByDesc('posting_date')->orderByDesc('journal_entries.id')->offset($query->pagination->offset())
-                ->limit($query->pagination->perPage)->get();
+                ->limit($query->pagination->perPage)->pluck('journal_entries.id');
+            if ($ids->isEmpty()) {
+                return new TransactionPageData([], $total);
+            }
+            $page = $rows->whereIn('journal_entries.id', $ids)
+                ->select('journal_entries.*', 'a.external_number as account_number', 'l.amount_minor')
+                ->orderByDesc('posting_date')->orderByDesc('journal_entries.id')->get();
 
             return new TransactionPageData($page->map(fn (JournalEntryRecord $record) => $record->toData())->all(), $total);
         });

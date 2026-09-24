@@ -1,0 +1,344 @@
+{
+    "started_at": "2026-09-24T18:07:55+00:00",
+    "mode": "full",
+    "status": "passed",
+    "runtime": {
+        "php": "8.4.1",
+        "mysql": "8.4.11",
+        "innodb_buffer_pool_bytes": 268435456,
+        "mysql_session_timezone": "+00:00",
+        "mysql_system_timezone": "-03",
+        "worker_memory_limit": "128M",
+        "workers": 2,
+        "chunk_records": 500
+    },
+    "scenarios": {
+        "memory-baseline": {
+            "import_id": "1",
+            "shape": {
+                "records": 10000,
+                "bytes": 5000000,
+                "income_minor": 505000,
+                "expense_minor": 185000,
+                "sha256": "3db2b56b95c8d3ac00e3ef18b18f778eab2f629c8dd28e2ee6f3f418bf3fb04c"
+            },
+            "upload_seconds": 0.2046661376953125,
+            "total_seconds": 42.365890979766846,
+            "rows_per_second": 236.03894002313825,
+            "result": {
+                "id": "1",
+                "original_name": "synthetic.csv",
+                "file_size_bytes": 5000000,
+                "status": "completed",
+                "processed_rows": "10000",
+                "inserted_rows": "10000",
+                "duplicate_rows": "0",
+                "rejected_rows": "0",
+                "created_at": "2026-09-24T18:07:58.773861Z",
+                "prepared_at": "2026-09-24T18:07:59.882134Z",
+                "started_at": "2026-09-24T18:08:00.827871Z",
+                "finished_at": "2026-09-24T18:08:40.357361Z",
+                "error_code": null,
+                "status_url": "/api/v1/imports/1"
+            },
+            "lock_delta": {
+                "Innodb_row_lock_time": 0,
+                "Innodb_row_lock_waits": 0
+            },
+            "chunks": {
+                "count": 20,
+                "duration_ms_p50": 1229.43274,
+                "duration_ms_p95": 1643.246925,
+                "duration_ms_max": 1643.246925,
+                "query_count": 50419,
+                "query_ms": 15243.770000000028,
+                "php_peak_bytes": 35651584
+            }
+        },
+        "scale": {
+            "import_id": "2",
+            "shape": {
+                "records": 200000,
+                "bytes": 100000000,
+                "income_minor": 10100000,
+                "expense_minor": 3700000,
+                "sha256": "26c8827ad974b63cecf571cef482b4b3357632105c38bd37a85965fcf20fe6c4"
+            },
+            "upload_seconds": 1.3518879413604736,
+            "total_seconds": 825.4700059890747,
+            "rows_per_second": 242.2862109451946,
+            "result": {
+                "id": "2",
+                "original_name": "synthetic.csv",
+                "file_size_bytes": 100000000,
+                "status": "completed",
+                "processed_rows": "200000",
+                "inserted_rows": "200000",
+                "duplicate_rows": "0",
+                "rejected_rows": "0",
+                "created_at": "2026-09-24T18:08:43.266353Z",
+                "prepared_at": "2026-09-24T18:08:44.953011Z",
+                "started_at": "2026-09-24T18:08:45.141579Z",
+                "finished_at": "2026-09-24T18:22:27.353167Z",
+                "error_code": null,
+                "status_url": "/api/v1/imports/2"
+            },
+            "lock_delta": {
+                "Innodb_row_lock_time": 2,
+                "Innodb_row_lock_waits": 3
+            },
+            "chunks": {
+                "count": 400,
+                "duration_ms_p50": 1232.257505,
+                "duration_ms_p95": 1827.56839,
+                "duration_ms_max": 8404.761556,
+                "query_count": 1008399,
+                "query_ms": 339447.9300000006,
+                "php_peak_bytes": 35651584
+            }
+        },
+        "overlap-a": {
+            "import_id": "3",
+            "shape": {
+                "records": 10000,
+                "bytes": 5000029,
+                "income_minor": 505000,
+                "expense_minor": 185000,
+                "sha256": "3c9e73b4cee5048c7d8bed04b56c10ab3466e8989ee013709520dc27bf47cc2c"
+            },
+            "upload_seconds": 0.23791098594665527,
+            "total_seconds": 57.76590085029602,
+            "rows_per_second": 173.11250846612143,
+            "result": {
+                "id": "3",
+                "original_name": "synthetic.csv",
+                "file_size_bytes": 5000029,
+                "status": "completed",
+                "processed_rows": "10000",
+                "inserted_rows": "5000",
+                "duplicate_rows": "5000",
+                "rejected_rows": "0",
+                "created_at": "2026-09-24T18:22:30.648813Z",
+                "prepared_at": "2026-09-24T18:22:30.990562Z",
+                "started_at": "2026-09-24T18:22:31.941380Z",
+                "finished_at": "2026-09-24T18:23:27.291105Z",
+                "error_code": null,
+                "status_url": "/api/v1/imports/3"
+            },
+            "lock_delta": {
+                "Innodb_row_lock_time": 28906,
+                "Innodb_row_lock_waits": 33
+            },
+            "chunks": {
+                "count": 20,
+                "duration_ms_p50": 1919.585579,
+                "duration_ms_p95": 6989.268467,
+                "duration_ms_max": 6989.268467,
+                "query_count": 45389,
+                "query_ms": 35912.700000000266,
+                "php_peak_bytes": 35651584
+            }
+        },
+        "overlap-b": {
+            "import_id": "4",
+            "shape": {
+                "records": 10000,
+                "bytes": 5000029,
+                "income_minor": 505000,
+                "expense_minor": 185000,
+                "sha256": "1d1e09f4c17ee57fbd6508b510b73f4e62ec86d6170ccadaf0b9319102ce47d5"
+            },
+            "upload_seconds": 0.18893098831176758,
+            "total_seconds": 59.62923812866211,
+            "rows_per_second": 167.70296441525855,
+            "result": {
+                "id": "4",
+                "original_name": "synthetic.csv",
+                "file_size_bytes": 5000029,
+                "status": "completed",
+                "processed_rows": "10000",
+                "inserted_rows": "10000",
+                "duplicate_rows": "0",
+                "rejected_rows": "0",
+                "created_at": "2026-09-24T18:22:30.881022Z",
+                "prepared_at": "2026-09-24T18:22:31.136988Z",
+                "started_at": "2026-09-24T18:22:31.942162Z",
+                "finished_at": "2026-09-24T18:23:30.214957Z",
+                "error_code": null,
+                "status_url": "/api/v1/imports/4"
+            },
+            "lock_delta": {
+                "Innodb_row_lock_time": 28906,
+                "Innodb_row_lock_waits": 33
+            },
+            "chunks": {
+                "count": 20,
+                "duration_ms_p50": 1991.020542,
+                "duration_ms_p95": 5748.008116,
+                "duration_ms_max": 5748.008116,
+                "query_count": 50419,
+                "query_ms": 36045.66000000005,
+                "php_peak_bytes": 35651584
+            }
+        },
+        "partial-replay": {
+            "import_id": "5",
+            "shape": {
+                "records": 10000,
+                "bytes": 5000029,
+                "income_minor": 505000,
+                "expense_minor": 185000,
+                "sha256": "1d1e09f4c17ee57fbd6508b510b73f4e62ec86d6170ccadaf0b9319102ce47d5"
+            },
+            "upload_seconds": 0.2179718017578125,
+            "total_seconds": 37.84625291824341,
+            "rows_per_second": 264.2269505940864,
+            "result": {
+                "id": "5",
+                "original_name": "synthetic.csv",
+                "file_size_bytes": 5000029,
+                "status": "completed",
+                "processed_rows": "10000",
+                "inserted_rows": "0",
+                "duplicate_rows": "10000",
+                "rejected_rows": "0",
+                "created_at": "2026-09-24T18:23:32.067156Z",
+                "prepared_at": "2026-09-24T18:23:32.994793Z",
+                "started_at": "2026-09-24T18:23:33.949903Z",
+                "finished_at": "2026-09-24T18:24:09.629491Z",
+                "error_code": null,
+                "status_url": "/api/v1/imports/5"
+            },
+            "lock_delta": {
+                "Innodb_row_lock_time": 7,
+                "Innodb_row_lock_waits": 1
+            },
+            "chunks": {
+                "count": 20,
+                "duration_ms_p50": 791.292567,
+                "duration_ms_p95": 1373.065033,
+                "duration_ms_max": 1373.065033,
+                "query_count": 40359,
+                "query_ms": 9822.759999999986,
+                "php_peak_bytes": 35651584
+            }
+        },
+        "recovery": {
+            "import_id": "6",
+            "shape": {
+                "records": 2000,
+                "bytes": 1000029,
+                "income_minor": 101000,
+                "expense_minor": 37000,
+                "sha256": "75ba7d8c761eddf676ae451a8d061fd69b55b83a0c10fba472d4531e4f1b95a1"
+            },
+            "upload_seconds": 0.15311789512634277,
+            "total_seconds": 309.13829708099365,
+            "rows_per_second": 6.469596355044952,
+            "result": {
+                "id": "6",
+                "original_name": "synthetic.csv",
+                "file_size_bytes": 1000029,
+                "status": "completed",
+                "processed_rows": "2000",
+                "inserted_rows": "2000",
+                "duplicate_rows": "0",
+                "rejected_rows": "0",
+                "created_at": "2026-09-24T18:24:14.838329Z",
+                "prepared_at": "2026-09-24T18:24:15.085863Z",
+                "started_at": "2026-09-24T18:24:15.929669Z",
+                "finished_at": "2026-09-24T18:29:23.681317Z",
+                "error_code": null,
+                "status_url": "/api/v1/imports/6"
+            },
+            "lock_delta": {
+                "Innodb_row_lock_time": 0,
+                "Innodb_row_lock_waits": 0
+            },
+            "chunks": {
+                "count": 4,
+                "duration_ms_p50": 1296.763214,
+                "duration_ms_p95": 1763.953087,
+                "duration_ms_max": 1763.953087,
+                "query_count": 10083,
+                "query_ms": 3566.5099999999975,
+                "php_peak_bytes": 35651584
+            }
+        }
+    },
+    "latency_ms": {
+        "dashboard-first-read": {
+            "samples": 1,
+            "min": 946.849278,
+            "median": 946.849278,
+            "max": 946.849278
+        },
+        "dashboard-cached": {
+            "samples": 5,
+            "min": 117.477428,
+            "median": 122.574832,
+            "max": 127.724966
+        },
+        "staled-balance-read": {
+            "samples": 1,
+            "min": 165.478829,
+            "median": 165.478829,
+            "max": 165.478829
+        },
+        "fresh-balance-read": {
+            "samples": 5,
+            "min": 123.539846,
+            "median": 131.956913,
+            "max": 140.007802
+        },
+        "transactions-first-page": {
+            "samples": 5,
+            "min": 779.133612,
+            "median": 838.923337,
+            "max": 1617.261982
+        },
+        "transactions-deep-page": {
+            "samples": 5,
+            "min": 1465.958507,
+            "median": 1548.906805,
+            "max": 1684.717947
+        },
+        "account-transactions": {
+            "samples": 5,
+            "min": 141.012715,
+            "median": 171.961211,
+            "max": 235.800229
+        },
+        "balances-page": {
+            "samples": 5,
+            "min": 137.792693,
+            "median": 164.121655,
+            "max": 184.35515
+        },
+        "import-rows": {
+            "samples": 5,
+            "min": 125.428861,
+            "median": 134.280501,
+            "max": 139.162231
+        }
+    },
+    "worker_rss_peak_bytes": 63225856,
+    "recovery": {
+        "signal": "SIGKILL",
+        "committed_rows_before": 500,
+        "lease_expires_at": "2026-09-24 18:27:17.939571",
+        "timers_modified": false,
+        "reserved_queue_job_preserved": true,
+        "seconds_after_kill": 304.95400404930115
+    },
+    "projector_drain_seconds": 94.03633403778076,
+    "job_exceptions": 0,
+    "controls": {
+        "records": 227000,
+        "income_minor": 11463500,
+        "expense_minor": 4199500,
+        "balance_minor": 7264000,
+        "ledger_entries": 454000
+    },
+    "finished_at": "2026-09-24T18:31:23+00:00"
+}
