@@ -1,8 +1,17 @@
-# Finance Ledger — etapa 08
+# Finance Ledger — etapa 09
 
-Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão conecta o CSV ao livro contábil: processamento em chunks, checkpoints, resultados por linha e retomada idempotente.
+Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 3/TypeScript independentes, com MySQL 8.4, Redis e worker. Esta versão entrega dashboard com cache por revisão, extratos e consultas dos resultados da importação, mantendo a API independente das telas Vue.
 
 ## Implementado até esta etapa
+
+- `GET /api/v1/dashboard`: receitas, despesas, saldo, contagem e revisão do titular, sem dupla contagem das contrapartidas.
+- Revisão e totais no mesmo snapshot MySQL; projeções pendentes não atrasam o dashboard.
+- Cache Redis por titular/revisão, com comparação e troca atômica, TTL de limpeza e fallback para SQL.
+- Consumidor `dashboard-cache-invalidator` ativo, com invalidação idempotente e confirmação durável após sucesso.
+- `GET /api/v1/accounts`, `/transactions` e `/accounts/{accountNumber}/transactions`, com filtros e páginas de até 10.
+- `GET /api/v1/imports/{importId}/rows` e `/errors`, com autorização pelo titular e filtros de classificação.
+- Contagem e registros de cada página de extrato/resultados lidos no mesmo snapshot; DTOs próprios e presenters explícitos.
+- Testes de cache real, eventos repetidos, precisão, falhas e snapshots durante commits concorrentes.
 
 - Consumidor `csv-importer` lê até 500 registros por chunk, com limites adicionais de bytes/tempo e suporte a aspas, vírgulas e campos multilinha.
 - Resolução de contas em lote, autorização pelo titular, valores em centavos BRL e duas partidas por operação nova.
@@ -63,7 +72,7 @@ Teste técnico em implementação incremental: API Laravel 13/PHP 8.4 e SPA Vue 
 - PHPUnit, Larastan/PHPStan, Pint, Vitest, Vue Test Utils, ESLint, checagem TypeScript e workflow de CI.
 - Diagnóstico real de infraestrutura: consulta MySQL, publica um job Redis e confere se o worker leu o arquivo privado escrito pela aplicação.
 
-O upload responde 202 e o worker prepara e processa o arquivo em background. O relay publica para `import-preparer` e `csv-importer`. `ProcessImportChunkUseCase` reutiliza a preparação contábil e `MysqlJournalRepository` na transação do checkpoint. O saldo é marcado como `staled` pelo trigger e recalculado na consulta ou pelo `balance-projector`. As entregas de `dashboard-cache-invalidator` aguardam o próximo incremento. O `actorUserId` vem do JWT, nunca de um ID livre enviado pelo cliente. A SPA mantém a tela operacional; as telas de negócio entram depois do backend.
+O upload responde 202 e o worker prepara e processa o arquivo em background. O relay publica para `import-preparer`, `csv-importer` e `dashboard-cache-invalidator`. `ProcessImportChunkUseCase` reutiliza a preparação contábil e `MysqlJournalRepository` na transação do checkpoint. O saldo é marcado como `staled` pelo trigger e recalculado na consulta ou pelo `balance-projector`. O consumidor de `LedgerChanged` remove revisões anteriores do cache; a consulta SQL da revisão impede leituras antigas mesmo se o evento atrasar. O `actorUserId` vem do JWT, nunca de um ID livre enviado pelo cliente. A SPA mantém a tela operacional; as telas de negócio entram depois do backend.
 
 O endpoint operacional público não expõe dados de negócio. O limite exato de 100.000.000 bytes é verificado no upload; o corpo multipart admite 110.000.000 bytes para acomodar o envelope. A paginação está conectada aos saldos e às importações, com validação HTTP e no DTO. O login recebe JSON; o upload usa multipart com um único campo `file`.
 
@@ -83,7 +92,7 @@ O bootstrap gera `.env` com chaves independentes para aplicação/JWT e senhas a
 
 As 900 contas financeiras pertencem ao usuário definido por `DEMO_USER_EMAIL` (padrão `demo@example.test`). A senha inicial fica em `DEMO_USER_PASSWORD`, gerada pelo bootstrap. O seed usa Argon2id e não troca senhas de usuários existentes. Funciona somente em `local`/`testing`; se uma conta do intervalo já pertencer a outra pessoa, aborta e desfaz o seed inteiro. O seed não carrega o CSV e as contas novas começam com saldo zero.
 
-Ao atualizar para a etapa 08, execute o bootstrap: ele aplica a migration do manifesto de integridade/tentativas e reinicia worker, relay e projector para carregar o código novo, mesmo quando a imagem Docker não mudou. Importações preparadas na etapa 07 serão processadas a partir das entregas já pendentes. Preserve `.env` e volumes. O Compose mantém `log_bin_trust_function_creators=1` nos bancos de desenvolvimento/teste, permitindo criar os triggers com o usuário da aplicação.
+Ao atualizar para a etapa 09, execute o bootstrap: ele aplica eventuais migrations anteriores e reinicia worker, relay e projector para carregar o código novo, mesmo quando a imagem Docker não mudou. Esta etapa não acrescenta migrations; as entregas pendentes de invalidação passam a ser consumidas. Preserve `.env` e volumes. O Compose mantém `log_bin_trust_function_creators=1` nos bancos de desenvolvimento/teste, permitindo criar os triggers com o usuário da aplicação.
 
 O primeiro build pode levar alguns minutos. Os serviços ficam disponíveis em:
 
@@ -149,17 +158,19 @@ Esse comando não precisa iniciar MySQL, Redis, worker nem o kernel Laravel. Par
 
 `bash scripts/test-mysql.sh` recria `mysql-test` e `redis-test` com `--force-recreate` e executa `test-runner` pelo perfil `test`. Esses serviços são descartáveis, usam `tmpfs`, não publicam portas e não compartilham os volumes de desenvolvimento. A recriação evita reutilizar containers que ainda referenciem uma rede removida entre execuções do Compose. A suíte recria somente `finance_ledger_test`, exige `MYSQL_TEST_RESET=1` e recusa configuração em cache. Os testes Redis exigem `REDIS_TEST_ENABLED=1`, usam prefixos exclusivos e removem somente suas próprias chaves. O script para os dois serviços ao terminar. As dependências PHP devem estar instaladas pelo bootstrap.
 
-Consulte [docs/step-08.md](docs/step-08.md) para chunks, limites, retomada, resultados do CSV e atualização. O upload está em [docs/step-07.md](docs/step-07.md), os saldos em [docs/step-06.md](docs/step-06.md), a postagem em [docs/step-05.md](docs/step-05.md), autenticação em [docs/step-04.md](docs/step-04.md) e o contrato HTTP em [docs/openapi.yaml](docs/openapi.yaml).
+Consulte [docs/step-09.md](docs/step-09.md) para dashboard, cache, extratos, resultados e atualização; [docs/step-08.md](docs/step-08.md) cobre chunks, limites e retomada. O upload está em [docs/step-07.md](docs/step-07.md), os saldos em [docs/step-06.md](docs/step-06.md), a postagem em [docs/step-05.md](docs/step-05.md), autenticação em [docs/step-04.md](docs/step-04.md) e o contrato HTTP em [docs/openapi.yaml](docs/openapi.yaml).
 
-**476 testes backend passaram, com 2845 asserções**:
+**556 testes backend passaram, com 3345 asserções**:
 
 | Suíte | Resultado |
 | --- | --- |
-| Núcleo puro e contratos em memória | 169 testes, 1517 asserções |
-| HTTP/JWT, armazenamento, parser CSV e isolamento | 127 testes, 389 asserções |
-| MySQL 8.4.11, Redis 8.2.1, HTTP real e concorrência | 180 testes, 939 asserções |
+| Núcleo puro e contratos em memória | 188 testes, 1811 asserções |
+| HTTP/JWT, armazenamento, parser CSV e isolamento | 165 testes, 445 asserções |
+| MySQL 8.4.11, Redis 8.2.1, HTTP real e concorrência | 203 testes, 1089 asserções |
 
 Pint, PHPStan/Larastan nível 6, Composer validate, configuração Compose e sintaxe Bash passaram. A integração usou MySQL e Redis reais e processos PHP independentes. Validou publicação, consumo, perda/republicação de jobs, concorrência, rollback de cada parte do checkpoint e perda da resposta de um commit já confirmado. O CSV fornecido foi importado integralmente e reenviado: 15.000 operações únicas, 30.000 partidas e nenhuma nova operação no reenvio. A consulta da conta #682 confirmou R$ 1.092,09 após recalcular sua projeção.
+
+As novas consultas confirmaram receitas de R$ 36.119.609,74, despesas de R$ 26.709.545,74 e saldo de R$ 9.410.064,00 no dashboard, preservados após reenvio do CSV. Os testes incluem snapshots durante commits concorrentes, autorização e filtros, precisão de 64 bits, Redis indisponível com fallback SQL, invalidação repetida e recuperação após falha da confirmação MySQL. O mesmo contrato do cache passou em memória e no Redis real. O OpenAPI 0.9.0 foi conferido contra as 15 operações HTTP registradas.
 
 O transporte multipart foi exercitado com servidor HTTP PHP 8.4 e `memory_limit=64M`: 100.000.000 bytes aceitos, um byte acima recusado e campos extras/arquivos repetidos rejeitados. Esse cenário verifica upload/preparação. O processamento financeiro completo foi validado com o CSV fornecido; a medição de importação financeira de 100 MB permanece para a etapa de desempenho.
 
@@ -173,6 +184,6 @@ A situação da infraestrutura anterior está em [docs/step-01.md](docs/step-01.
 
 ## Próximo incremento
 
-Implementar dashboard, cache Redis por revisão financeira, consumidor de invalidação e extratos paginados. As telas Vue e os testes do fluxo completo entram na sequência do plano aprovado.
+Implementar as telas Vue de login, dashboard, contas/saldos, extrato, upload e acompanhamento. JWT em memória, formatação exata de BRL, polling cancelável e testes frontend/fluxos seguem o plano aprovado.
 
 As separações arquiteturais estão em [docs/architecture.md](docs/architecture.md), e as regras do teste estão em [docs/decisions.md](docs/decisions.md).

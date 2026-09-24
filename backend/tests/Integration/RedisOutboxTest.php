@@ -160,6 +160,6 @@ final class RedisOutboxTest extends TestCase
         self::assertSame(1, DB::table('imports')->value('inserted_rows'));
         self::assertSame(2, DB::table('ledger_entries')->count());
         self::assertSame('acknowledged', DB::table('outbox_deliveries')->where('consumer', 'csv-importer')->value('status'));
-        self::assertSame(0, $relay->execute()->claimed);
+        self::assertSame(1, $relay->execute()->claimed); // LedgerChanged now has an active cache consumer.
     }
 }

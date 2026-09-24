@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: Finance Ledger API
-  version: 0.8.0
+  version: 0.9.0
   description: >-
-    Endpoints operacionais, autenticação, saldos, upload e acompanhamento até a etapa 08.
+    Endpoints operacionais, autenticação, saldos, importação, dashboard e extratos até a etapa 09.
     JWT de 900 segundos, sem refresh; logout revoga somente o token apresentado.
     O worker prepara o CSV e processa chunks de até 500 registros com checkpoints idempotentes.
 servers:
@@ -314,6 +314,397 @@ paths:
               schema: {$ref: '#/components/schemas/Error'}
               example: {message: 'Import not found.', code: import_not_found}
         '503': {$ref: '#/components/responses/ImportUnavailable'}
+  /dashboard:
+    get:
+      operationId: getDashboard
+      security:
+      - bearerAuth: []
+      description: Totais globais do titular no snapshot identificado pela revisão. Não recebe filtros nem paginação.
+        Soma somente a partida financeira de cada operação. Consulta a revisão no MySQL antes do cache Redis; falha
+        de cache permite fallback SQL, e falha SQL retorna 503 sem cache antigo. Não altera projeções staled.
+      responses:
+        '200':
+          description: Consulta concluída
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Dashboard'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/FinancialReadUnavailable'
+  /accounts:
+    get:
+      operationId: listAccounts
+      security:
+      - bearerAuth: []
+      description: Contas financeiras do titular, inclusive inativas, por ID interno crescente. Não inclui saldos
+        nem contrapartidas técnicas. Um filtro sem conta autorizada retorna data vazio.
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9223372036854775807
+          default: 1
+        description: Inteiro decimal; offsets fora da faixa assinada de 64 bits retornam 422.
+      - name: per_page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 10
+      - name: account_number
+        in: query
+        schema:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          maxLength: 19
+          example: '682'
+        description: Número externo positivo até 9223372036854775807; não é o ID interno.
+      responses:
+        '200':
+          description: Consulta concluída
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    maxItems: 10
+                    items:
+                      $ref: '#/components/schemas/Account'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BalanceUnavailable'
+        '422':
+          $ref: '#/components/responses/InvalidQuery'
+  /transactions:
+    get:
+      operationId: listTransactions
+      security:
+      - bearerAuth: []
+      description: Operações do titular, por data financeira/ID decrescentes. Count e itens compartilham snapshot.
+        Páginas diferentes podem deslocar-se durante importações concorrentes. Sem expansão de partidas ou cache Redis.
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9223372036854775807
+          default: 1
+        description: Inteiro decimal; offsets fora da faixa assinada de 64 bits retornam 422.
+      - name: per_page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 10
+      - name: account_number
+        in: query
+        schema:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          maxLength: 19
+          example: '682'
+        description: Número externo positivo até 9223372036854775807; não é o ID interno.
+      - name: date_from
+        in: query
+        schema:
+          type: string
+          format: date
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}$
+        description: Data inicial inclusiva.
+      - name: date_to
+        in: query
+        schema:
+          type: string
+          format: date
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}$
+        description: Data final inclusiva; não pode ser anterior a date_from.
+      - name: type
+        in: query
+        schema:
+          type: string
+          enum:
+          - income
+          - expense
+      responses:
+        '200':
+          description: Consulta concluída
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    maxItems: 10
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/FinancialReadUnavailable'
+        '422':
+          $ref: '#/components/responses/InvalidQuery'
+        '404':
+          description: 'Conta informada inexistente ou não autorizada: account_not_found.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /accounts/{accountNumber}/transactions:
+    get:
+      operationId: listAccountTransactions
+      security:
+      - bearerAuth: []
+      description: Extrato da conta financeira do titular, inclusive inativa. O número externo da rota prevalece sobre
+        account_number na query. Ordenação e consistência seguem /transactions.
+      parameters:
+      - name: accountNumber
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          maxLength: 19
+        description: Identificador decimal positivo até 9223372036854775807.
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9223372036854775807
+          default: 1
+        description: Inteiro decimal; offsets fora da faixa assinada de 64 bits retornam 422.
+      - name: per_page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 10
+      - name: date_from
+        in: query
+        schema:
+          type: string
+          format: date
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}$
+        description: Data inicial inclusiva.
+      - name: date_to
+        in: query
+        schema:
+          type: string
+          format: date
+          pattern: ^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}$
+        description: Data final inclusiva; não pode ser anterior a date_from.
+      - name: type
+        in: query
+        schema:
+          type: string
+          enum:
+          - income
+          - expense
+      responses:
+        '200':
+          description: Consulta concluída
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    maxItems: 10
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/FinancialReadUnavailable'
+        '422':
+          $ref: '#/components/responses/InvalidQuery'
+        '404':
+          description: 'Conta inexistente ou não autorizada: account_not_found.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /imports/{importId}/rows:
+    get:
+      operationId: listImportRows
+      security:
+      - bearerAuth: []
+      description: Resultados confirmados por número lógico crescente. Cabeçalho é o registro 1. Titularidade, count
+        e itens são consultados no mesmo snapshot. Uma importação própria ainda sem resultados retorna página vazia.
+      parameters:
+      - name: importId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          maxLength: 19
+        description: Identificador decimal positivo até 9223372036854775807.
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9223372036854775807
+          default: 1
+        description: Inteiro decimal; offsets fora da faixa assinada de 64 bits retornam 422.
+      - name: per_page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 10
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - inserted
+          - duplicate
+          - rejected
+      responses:
+        '200':
+          description: Consulta concluída
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    maxItems: 10
+                    items:
+                      $ref: '#/components/schemas/ImportRow'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/FinancialReadUnavailable'
+        '422':
+          $ref: '#/components/responses/InvalidQuery'
+        '404':
+          description: 'Importação inexistente ou não autorizada: import_not_found.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /imports/{importId}/errors:
+    get:
+      operationId: listImportErrors
+      security:
+      - bearerAuth: []
+      description: Somente registros rejeitados, por número lógico crescente. Query status não pode ampliar o resultado.
+        Falhas estruturais sem checkpoint permanecem no acompanhamento, sem linhas fictícias.
+      parameters:
+      - name: importId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          maxLength: 19
+        description: Identificador decimal positivo até 9223372036854775807.
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9223372036854775807
+          default: 1
+        description: Inteiro decimal; offsets fora da faixa assinada de 64 bits retornam 422.
+      - name: per_page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 10
+      responses:
+        '200':
+          description: Consulta concluída
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    maxItems: 10
+                    items:
+                      $ref: '#/components/schemas/ImportRow'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/FinancialReadUnavailable'
+        '422':
+          $ref: '#/components/responses/InvalidQuery'
+        '404':
+          description: 'Importação inexistente ou não autorizada: import_not_found.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     bearerAuth:
@@ -325,6 +716,120 @@ components:
     NoStore:
       schema: {type: string, example: 'no-store, private'}
   schemas:
+    Dashboard:
+      type: object
+      required:
+      - currency
+      - income_minor
+      - expense_minor
+      - balance_minor
+      - transaction_count
+      - financial_revision
+      properties:
+        currency:
+          type: string
+          const: BRL
+        income_minor:
+          $ref: '#/components/schemas/UnsignedInteger'
+        expense_minor:
+          $ref: '#/components/schemas/UnsignedInteger'
+        balance_minor:
+          $ref: '#/components/schemas/DecimalInteger'
+        transaction_count:
+          $ref: '#/components/schemas/UnsignedInteger'
+        financial_revision:
+          $ref: '#/components/schemas/UnsignedInteger'
+    Account:
+      type: object
+      required:
+      - id
+      - account_number
+      - currency
+      - active
+      properties:
+        id:
+          $ref: '#/components/schemas/UnsignedInteger'
+        account_number:
+          $ref: '#/components/schemas/UnsignedInteger'
+        currency:
+          type: string
+          const: BRL
+        active:
+          type: boolean
+    Transaction:
+      type: object
+      required:
+      - id
+      - account_number
+      - transaction_date
+      - description
+      - type
+      - amount_minor
+      - currency
+      - created_at
+      properties:
+        id:
+          $ref: '#/components/schemas/UnsignedInteger'
+        account_number:
+          $ref: '#/components/schemas/UnsignedInteger'
+        transaction_date:
+          type: string
+          format: date
+        description:
+          type: string
+        type:
+          type: string
+          enum:
+          - income
+          - expense
+        amount_minor:
+          $ref: '#/components/schemas/UnsignedInteger'
+        currency:
+          type: string
+          const: BRL
+        created_at:
+          type: string
+          format: date-time
+    ImportRow:
+      type: object
+      required:
+      - id
+      - source_record_number
+      - status
+      - source_row_hash
+      - journal_entry_id
+      - error_code
+      - error_message
+      properties:
+        id:
+          $ref: '#/components/schemas/UnsignedInteger'
+        source_record_number:
+          $ref: '#/components/schemas/UnsignedInteger'
+        status:
+          type: string
+          enum:
+          - inserted
+          - duplicate
+          - rejected
+        source_row_hash:
+          type:
+          - string
+          - 'null'
+          pattern: ^[0-9a-f]{64}$
+        journal_entry_id:
+          type:
+          - string
+          - 'null'
+          pattern: ^[1-9][0-9]*$
+        error_code:
+          type:
+          - string
+          - 'null'
+        error_message:
+          type:
+          - string
+          - 'null'
+          description: Mensagem genérica de rejeição; não contém SQL nem detalhes internos.
     DecimalInteger:
       type: string
       pattern: '^-?(0|[1-9][0-9]*)$'
@@ -429,6 +934,20 @@ components:
           type: string
           enum: [invalid_credentials, unauthenticated, rate_limited, authentication_unavailable, account_not_found, balance_unavailable, import_not_found, import_unavailable, upload_too_large, multipart_required, invalid_multipart, one_csv_required, incomplete_upload, empty_csv_file, invalid_csv_file]
   responses:
+    FinancialReadUnavailable:
+      description: Falha de leitura financeira ou overflow. Não retorna dados parciais, antigos ou zero substituto.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            const: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Financial data is temporarily unavailable.
+            code: financial_read_unavailable
     UploadTooLarge:
       description: Arquivo acima de 100000000 bytes ou corpo multipart acima de 110000000 bytes.
       headers:

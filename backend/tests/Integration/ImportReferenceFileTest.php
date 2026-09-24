@@ -6,6 +6,10 @@ namespace Tests\Integration;
 
 use App\Application\Balances\Data\GetAccountBalanceRequest;
 use App\Application\Balances\GetAccountBalanceUseCase;
+use App\Application\Dashboard\Contracts\DashboardRepository;
+use App\Application\Pagination\PageRequest;
+use App\Application\Transactions\Contracts\LedgerReadRepository;
+use App\Application\Transactions\Data\TransactionQueryData;
 use App\Domain\Accounting\Data\AccountData;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
@@ -54,6 +58,12 @@ final class ImportReferenceFileTest extends TestCase
         $balance = $this->app->make(GetAccountBalanceUseCase::class)->execute(new GetAccountBalanceRequest('7', '682'))->balance;
         self::assertSame('109209', $balance->balanceMinor);
         self::assertSame(0, DB::table('account_balances')->where('account_id', '10682')->value('staled'));
+        $dashboard = $this->app->make(DashboardRepository::class)->snapshot('7');
+        self::assertSame(['3611960974', '2670954574', '941006400', '15000'],
+            [$dashboard->incomeMinor, $dashboard->expenseMinor, $dashboard->balanceMinor, $dashboard->transactionCount]);
+        $statement = $this->app->make(LedgerReadRepository::class)->page(new TransactionQueryData('7', new PageRequest, '682'));
+        self::assertSame(10, $statement->total);
+        self::assertCount(10, $statement->transactions);
         $revision = DB::table('financial_states')->where('owner_user_id', '7')->value('revision');
         $events = DB::table('outbox_events')->where('event_type', 'LedgerChanged')->count();
         $started = microtime(true);
@@ -64,6 +74,7 @@ final class ImportReferenceFileTest extends TestCase
         self::assertSame(30000, DB::table('ledger_entries')->count());
         self::assertSame($revision, DB::table('financial_states')->where('owner_user_id', '7')->value('revision'));
         self::assertSame($events, DB::table('outbox_events')->where('event_type', 'LedgerChanged')->count());
+        self::assertEquals($dashboard, $this->app->make(DashboardRepository::class)->snapshot('7'));
         fwrite(STDERR, json_encode(['reference_csv_records' => 15000, 'first_import_seconds' => round($firstSeconds, 3),
             'duplicate_import_seconds' => round(microtime(true) - $started, 3), 'php_peak_bytes' => memory_get_peak_usage(true)], JSON_THROW_ON_ERROR)."\n");
     }

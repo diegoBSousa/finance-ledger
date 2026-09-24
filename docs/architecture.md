@@ -1,6 +1,6 @@
 # Arquitetura e fronteiras
 
-A etapa 08 acrescenta processamento financeiro por chunks com checkpoint, resultados por linha e retomada idempotente. O núcleo contábil e os casos de uso continuam testáveis sem Laravel; os adapters MySQL implementam locks, transações e outbox.
+A etapa 09 acrescenta dashboard com cache por revisão, extratos e resultados da importação. O processamento financeiro por chunks mantém checkpoint e retomada idempotente. O núcleo contábil e os casos de uso continuam testáveis sem Laravel; os adapters MySQL implementam locks, transações e outbox.
 
 ## Direção das dependências
 
@@ -89,7 +89,7 @@ A preparação inicial persiste hashes SHA-256 de blocos de 1 MiB em `imports.fi
 
 Um rollback desfaz também os efeitos dos triggers, resultados e checkpoint; commits anteriores permanecem. Geração já concluída ou importação terminal apenas confirma a entrega repetida. Uma posse expirada não pode gravar nem liberar a reserva de outro processo. `chunk_attempts` registra até cinco execuções por geração, inclusive reservas abandonadas; sucesso reinicia o contador para a próxima. Erros estruturais encerram imediatamente e falhas técnicas liberam a posse para retentar. O esgotamento torna a importação `failed`, preservando o progresso durável.
 
-O último chunk grava `completed` ou `completed_with_errors` e um evento `ImportCompleted`; falhas definitivas de chunk gravam `ImportFailed`. Esses eventos de término não têm consumidores habilitados nesta etapa. Os resultados por registro permanecem em `import_rows`; a API de acompanhamento expõe os contadores. Limites, recuperação e evidências estão em [step-08.md](step-08.md).
+O último chunk grava `completed` ou `completed_with_errors` e um evento `ImportCompleted`; falhas definitivas de chunk gravam `ImportFailed`. Esses eventos de término não têm consumidores habilitados nesta etapa. Os resultados por registro permanecem em `import_rows`; a API de acompanhamento expõe os contadores, e as rotas `/rows` e `/errors` apresentam resultados paginados. Limites, recuperação e evidências estão em [step-08.md](step-08.md).
 
 ## Publicação e confirmação da outbox
 
@@ -97,7 +97,19 @@ O último chunk grava `completed` ou `completed_with_errors` e um evento `Import
 
 Aceitação pelo Redis muda a entrega para `published`; apenas o commit do consumidor a torna `acknowledged`. Entregas publicadas há 300 segundos sem confirmação e reservas expiradas ficam elegíveis novamente. Falhas conhecidas de publicação recebem atraso exponencial de 2 a 256 segundos. Escritas do relay comparam status/token, preservando confirmações antecipadas e reservas de outro processo. Uma resposta SQL perdida depois de publicar não vira confirmação fictícia nem apaga a intenção durável.
 
-O protocolo admite entregas repetidas. A idempotência da preparação, os locks e a posse revalidada impedem gerar mais de uma intenção inicial de chunk. O relay atende `import-preparer` e `csv-importer`; `dashboard-cache-invalidator` aguarda o próximo incremento. Não há confirmação automática de eventos sem handler.
+O protocolo admite entregas repetidas. A idempotência da preparação, os locks e a posse revalidada impedem gerar mais de uma intenção inicial de chunk. O relay atende `import-preparer`, `csv-importer` e `dashboard-cache-invalidator`. Não há confirmação automática de eventos sem handler.
+
+## Dashboard, cache e consultas
+
+`GetDashboardUseCase` consulta a revisão SQL e tenta `DashboardCache` com titular/revisão. Num miss, `DashboardRepository::snapshot()` retorna revisão e totais lidos juntos na conexão reservada `ledger_read`, em `REPEATABLE READ`. O agregado usa somente a partida financeira de cada operação. Não depende da atualidade das projeções nem as altera. Overflow e falha SQL produzem 503; Redis indisponível permite fallback para um snapshot SQL válido.
+
+`RedisDashboardCache` guarda JSON, com chave por titular/revisão e um ponteiro para o valor vigente. Scripts Lua com comparação e troca impedem que uma gravação antiga substitua uma nova; a invalidação remove somente revisões anteriores. O TTL limita a retenção. Nenhum flush ou scan global é usado. Uma leitura antiga preenchida após a invalidação continua sob sua própria revisão e não é utilizada por consultas da revisão nova.
+
+`InvalidateDashboardJob` transporta só o ID da entrega. Seu caso de uso resolve `LedgerChanged` v1, invalida Redis e depois confirma o consumidor no MySQL. Uma falha entre essas ações admite repetição segura; a outbox recupera mensagens perdidas. Não há transação SQL aberta durante acesso ao Redis.
+
+`LedgerReadRepository` e `ImportRowsRepository` devolvem páginas próprias, com contagem e itens no mesmo snapshot. Controllers preservam o titular do JWT e limitam páginas a dez. `JournalEntryRecord` e `ImportRowRecord` convertem resultados em DTOs; nenhuma interface expõe Eloquent. A listagem cadastral reutiliza a seleção de contas financeiras já disponível, sem recalcular saldos que não serão exibidos.
+
+Filtros, contrato HTTP, consistência entre páginas e protocolo completo estão em [step-09.md](step-09.md).
 
 ## Processos
 

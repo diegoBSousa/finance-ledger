@@ -83,6 +83,9 @@ return [
         // A separate PDO session keeps refreshes independent from ambient writer snapshots.
         'balance_projection' => [...$mysql, 'isolation_level' => 'READ COMMITTED', 'timezone' => '+00:00'],
 
+        // Read-only application operations use a committed snapshot independent of writers/projectors.
+        'ledger_read' => [...$mysql, 'isolation_level' => 'REPEATABLE READ', 'timezone' => '+00:00'],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),
@@ -176,6 +179,9 @@ return [
 
         // Relay sockets are bounded without interrupting the worker's blocking pop.
         'outbox' => [...$redisQueue, 'timeout' => 2, 'read_timeout' => 2, 'max_retries' => 0],
+
+        'dashboard' => [...$redisQueue, 'database' => env('REDIS_CACHE_DB', '1'),
+            'timeout' => 2, 'read_timeout' => 2, 'max_retries' => 0],
 
         'cache' => [
             'url' => env('REDIS_URL'),
