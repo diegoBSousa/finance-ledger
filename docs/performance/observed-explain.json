@@ -1,0 +1,1367 @@
+[
+    {
+        "sql": "select count(*) as `aggregate` from `journal_entries` inner join `accounts` as `a` on `a`.`id` = `journal_entries`.`financial_account_id` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `journal_entries`.`id` and `l`.`account_id` = `journal_entries`.`financial_account_id` where `journal_entries`.`owner_user_id` = ?",
+        "bindings": [
+            "1"
+        ],
+        "observed_ms": 656.3,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "79151.75"
+                },
+                "nested_loop": [
+                    {
+                        "table": {
+                            "table_name": "journal_entries",
+                            "access_type": "ref",
+                            "possible_keys": [
+                                "PRIMARY",
+                                "journal_owner_hash_unique",
+                                "journal_id_owner_currency_unique",
+                                "journal_account_date_id_index",
+                                "journal_financial_account_fk",
+                                "journal_owner_read_index"
+                            ],
+                            "key": "journal_owner_read_index",
+                            "used_key_parts": [
+                                "owner_user_id"
+                            ],
+                            "key_length": "8",
+                            "ref": [
+                                "const"
+                            ],
+                            "rows_examined_per_scan": 98322,
+                            "rows_produced_per_join": 98322,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "134.57",
+                                "eval_cost": "9832.20",
+                                "prefix_cost": "9966.77",
+                                "data_read_per_join": "14M"
+                            },
+                            "used_columns": [
+                                "id",
+                                "owner_user_id",
+                                "financial_account_id"
+                            ]
+                        }
+                    },
+                    {
+                        "table": {
+                            "table_name": "a",
+                            "access_type": "eq_ref",
+                            "possible_keys": [
+                                "PRIMARY",
+                                "accounts_id_owner_currency_unique"
+                            ],
+                            "key": "PRIMARY",
+                            "used_key_parts": [
+                                "id"
+                            ],
+                            "key_length": "8",
+                            "ref": [
+                                "finance_ledger_performance.journal_entries.financial_account_id"
+                            ],
+                            "rows_examined_per_scan": 1,
+                            "rows_produced_per_join": 98322,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "24580.50",
+                                "eval_cost": "9832.20",
+                                "prefix_cost": "44379.47",
+                                "data_read_per_join": "6M"
+                            },
+                            "used_columns": [
+                                "id"
+                            ]
+                        }
+                    },
+                    {
+                        "table": {
+                            "table_name": "l",
+                            "access_type": "ref",
+                            "possible_keys": [
+                                "ledger_journal_position_unique",
+                                "ledger_account_journal_index",
+                                "ledger_journal_fk",
+                                "ledger_account_fk"
+                            ],
+                            "key": "ledger_account_journal_index",
+                            "used_key_parts": [
+                                "account_id",
+                                "journal_entry_id"
+                            ],
+                            "key_length": "16",
+                            "ref": [
+                                "finance_ledger_performance.journal_entries.financial_account_id",
+                                "finance_ledger_performance.journal_entries.id"
+                            ],
+                            "rows_examined_per_scan": 1,
+                            "rows_produced_per_join": 101891,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "24583.11",
+                                "eval_cost": "10189.18",
+                                "prefix_cost": "79151.75",
+                                "data_read_per_join": "6M"
+                            },
+                            "used_columns": [
+                                "journal_entry_id",
+                                "account_id"
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    {
+        "sql": "select `journal_entries`.`id` from `journal_entries` inner join `accounts` as `a` on `a`.`id` = `journal_entries`.`financial_account_id` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `journal_entries`.`id` and `l`.`account_id` = `journal_entries`.`financial_account_id` where `journal_entries`.`owner_user_id` = ? order by `posting_date` desc, `journal_entries`.`id` desc limit 10 offset 0",
+        "bindings": [
+            "1"
+        ],
+        "observed_ms": 2.98,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "79151.75"
+                },
+                "ordering_operation": {
+                    "using_filesort": false,
+                    "nested_loop": [
+                        {
+                            "table": {
+                                "table_name": "journal_entries",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "journal_owner_hash_unique",
+                                    "journal_id_owner_currency_unique",
+                                    "journal_account_date_id_index",
+                                    "journal_financial_account_fk",
+                                    "journal_owner_read_index"
+                                ],
+                                "key": "journal_owner_read_index",
+                                "used_key_parts": [
+                                    "owner_user_id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "const"
+                                ],
+                                "rows_examined_per_scan": 98322,
+                                "rows_produced_per_join": 98322,
+                                "filtered": "100.00",
+                                "backward_index_scan": true,
+                                "using_index": true,
+                                "cost_info": {
+                                    "read_cost": "134.57",
+                                    "eval_cost": "9832.20",
+                                    "prefix_cost": "9966.77",
+                                    "data_read_per_join": "14M"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "owner_user_id",
+                                    "financial_account_id",
+                                    "posting_date"
+                                ]
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "a",
+                                "access_type": "eq_ref",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "accounts_id_owner_currency_unique"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "finance_ledger_performance.journal_entries.financial_account_id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 98322,
+                                "filtered": "100.00",
+                                "using_index": true,
+                                "cost_info": {
+                                    "read_cost": "24580.50",
+                                    "eval_cost": "9832.20",
+                                    "prefix_cost": "44379.47",
+                                    "data_read_per_join": "6M"
+                                },
+                                "used_columns": [
+                                    "id"
+                                ]
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "l",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                    "ledger_journal_position_unique",
+                                    "ledger_account_journal_index",
+                                    "ledger_journal_fk",
+                                    "ledger_account_fk"
+                                ],
+                                "key": "ledger_account_journal_index",
+                                "used_key_parts": [
+                                    "account_id",
+                                    "journal_entry_id"
+                                ],
+                                "key_length": "16",
+                                "ref": [
+                                    "finance_ledger_performance.journal_entries.financial_account_id",
+                                    "finance_ledger_performance.journal_entries.id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 101891,
+                                "filtered": "100.00",
+                                "using_index": true,
+                                "cost_info": {
+                                    "read_cost": "24583.11",
+                                    "eval_cost": "10189.18",
+                                    "prefix_cost": "79151.75",
+                                    "data_read_per_join": "6M"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "journal_entry_id",
+                                    "account_id"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "sql": "select `journal_entries`.*, `a`.`external_number` as `account_number`, `l`.`amount_minor` from `journal_entries` inner join `accounts` as `a` on `a`.`id` = `journal_entries`.`financial_account_id` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `journal_entries`.`id` and `l`.`account_id` = `journal_entries`.`financial_account_id` where `journal_entries`.`owner_user_id` = ? and `journal_entries`.`id` in (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) order by `posting_date` desc, `journal_entries`.`id` desc",
+        "bindings": [
+            "1",
+            "227001",
+            "227000",
+            "226999",
+            "226998",
+            "226997",
+            "226996",
+            "226995",
+            "226994",
+            "226993",
+            "226992"
+        ],
+        "observed_ms": 1.01,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "19.38"
+                },
+                "ordering_operation": {
+                    "using_filesort": true,
+                    "cost_info": {
+                        "sort_cost": "5.18"
+                    },
+                    "nested_loop": [
+                        {
+                            "table": {
+                                "table_name": "journal_entries",
+                                "access_type": "range",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "journal_owner_hash_unique",
+                                    "journal_id_owner_currency_unique",
+                                    "journal_account_date_id_index",
+                                    "journal_financial_account_fk",
+                                    "journal_owner_read_index"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "rows_examined_per_scan": 10,
+                                "rows_produced_per_join": 4,
+                                "filtered": "50.00",
+                                "cost_info": {
+                                    "read_cost": "10.14",
+                                    "eval_cost": "0.50",
+                                    "prefix_cost": "10.64",
+                                    "data_read_per_join": "759"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "owner_user_id",
+                                    "financial_account_id",
+                                    "uploaded_by_user_id",
+                                    "posting_date",
+                                    "description",
+                                    "original_description",
+                                    "movement_type",
+                                    "currency",
+                                    "source_row_hash",
+                                    "canonical_record",
+                                    "created_at"
+                                ],
+                                "attached_condition": "((`finance_ledger_performance`.`journal_entries`.`owner_user_id` = '1') and (`finance_ledger_performance`.`journal_entries`.`id` in ('227001','227000','226999','226998','226997','226996','226995','226994','226993','226992')))"
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "a",
+                                "access_type": "eq_ref",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "accounts_id_owner_currency_unique"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "finance_ledger_performance.journal_entries.financial_account_id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 4,
+                                "filtered": "100.00",
+                                "cost_info": {
+                                    "read_cost": "1.25",
+                                    "eval_cost": "0.50",
+                                    "prefix_cost": "12.39",
+                                    "data_read_per_join": "359"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "external_number"
+                                ]
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "l",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                    "ledger_journal_position_unique",
+                                    "ledger_account_journal_index",
+                                    "ledger_journal_fk",
+                                    "ledger_account_fk"
+                                ],
+                                "key": "ledger_account_journal_index",
+                                "used_key_parts": [
+                                    "account_id",
+                                    "journal_entry_id"
+                                ],
+                                "key_length": "16",
+                                "ref": [
+                                    "finance_ledger_performance.journal_entries.financial_account_id",
+                                    "finance_ledger_performance.journal_entries.id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 5,
+                                "filtered": "100.00",
+                                "cost_info": {
+                                    "read_cost": "1.30",
+                                    "eval_cost": "0.52",
+                                    "prefix_cost": "14.20",
+                                    "data_read_per_join": "331"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "journal_entry_id",
+                                    "account_id",
+                                    "amount_minor"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "sql": "select count(*) as `aggregate` from `journal_entries` inner join `accounts` as `a` on `a`.`id` = `journal_entries`.`financial_account_id` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `journal_entries`.`id` and `l`.`account_id` = `journal_entries`.`financial_account_id` where `journal_entries`.`owner_user_id` = ?",
+        "bindings": [
+            "1"
+        ],
+        "observed_ms": 688.78,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "79151.75"
+                },
+                "nested_loop": [
+                    {
+                        "table": {
+                            "table_name": "journal_entries",
+                            "access_type": "ref",
+                            "possible_keys": [
+                                "PRIMARY",
+                                "journal_owner_hash_unique",
+                                "journal_id_owner_currency_unique",
+                                "journal_account_date_id_index",
+                                "journal_financial_account_fk",
+                                "journal_owner_read_index"
+                            ],
+                            "key": "journal_owner_read_index",
+                            "used_key_parts": [
+                                "owner_user_id"
+                            ],
+                            "key_length": "8",
+                            "ref": [
+                                "const"
+                            ],
+                            "rows_examined_per_scan": 98322,
+                            "rows_produced_per_join": 98322,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "134.57",
+                                "eval_cost": "9832.20",
+                                "prefix_cost": "9966.77",
+                                "data_read_per_join": "14M"
+                            },
+                            "used_columns": [
+                                "id",
+                                "owner_user_id",
+                                "financial_account_id"
+                            ]
+                        }
+                    },
+                    {
+                        "table": {
+                            "table_name": "a",
+                            "access_type": "eq_ref",
+                            "possible_keys": [
+                                "PRIMARY",
+                                "accounts_id_owner_currency_unique"
+                            ],
+                            "key": "PRIMARY",
+                            "used_key_parts": [
+                                "id"
+                            ],
+                            "key_length": "8",
+                            "ref": [
+                                "finance_ledger_performance.journal_entries.financial_account_id"
+                            ],
+                            "rows_examined_per_scan": 1,
+                            "rows_produced_per_join": 98322,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "24580.50",
+                                "eval_cost": "9832.20",
+                                "prefix_cost": "44379.47",
+                                "data_read_per_join": "6M"
+                            },
+                            "used_columns": [
+                                "id"
+                            ]
+                        }
+                    },
+                    {
+                        "table": {
+                            "table_name": "l",
+                            "access_type": "ref",
+                            "possible_keys": [
+                                "ledger_journal_position_unique",
+                                "ledger_account_journal_index",
+                                "ledger_journal_fk",
+                                "ledger_account_fk"
+                            ],
+                            "key": "ledger_account_journal_index",
+                            "used_key_parts": [
+                                "account_id",
+                                "journal_entry_id"
+                            ],
+                            "key_length": "16",
+                            "ref": [
+                                "finance_ledger_performance.journal_entries.financial_account_id",
+                                "finance_ledger_performance.journal_entries.id"
+                            ],
+                            "rows_examined_per_scan": 1,
+                            "rows_produced_per_join": 101891,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "24583.11",
+                                "eval_cost": "10189.18",
+                                "prefix_cost": "79151.75",
+                                "data_read_per_join": "6M"
+                            },
+                            "used_columns": [
+                                "journal_entry_id",
+                                "account_id"
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    {
+        "sql": "select `journal_entries`.`id` from `journal_entries` inner join `accounts` as `a` on `a`.`id` = `journal_entries`.`financial_account_id` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `journal_entries`.`id` and `l`.`account_id` = `journal_entries`.`financial_account_id` where `journal_entries`.`owner_user_id` = ? order by `posting_date` desc, `journal_entries`.`id` desc limit 10 offset 226990",
+        "bindings": [
+            "1"
+        ],
+        "observed_ms": 739.9,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "79151.75"
+                },
+                "ordering_operation": {
+                    "using_filesort": false,
+                    "nested_loop": [
+                        {
+                            "table": {
+                                "table_name": "journal_entries",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "journal_owner_hash_unique",
+                                    "journal_id_owner_currency_unique",
+                                    "journal_account_date_id_index",
+                                    "journal_financial_account_fk",
+                                    "journal_owner_read_index"
+                                ],
+                                "key": "journal_owner_read_index",
+                                "used_key_parts": [
+                                    "owner_user_id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "const"
+                                ],
+                                "rows_examined_per_scan": 98322,
+                                "rows_produced_per_join": 98322,
+                                "filtered": "100.00",
+                                "backward_index_scan": true,
+                                "using_index": true,
+                                "cost_info": {
+                                    "read_cost": "134.57",
+                                    "eval_cost": "9832.20",
+                                    "prefix_cost": "9966.77",
+                                    "data_read_per_join": "14M"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "owner_user_id",
+                                    "financial_account_id",
+                                    "posting_date"
+                                ]
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "a",
+                                "access_type": "eq_ref",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "accounts_id_owner_currency_unique"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "finance_ledger_performance.journal_entries.financial_account_id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 98322,
+                                "filtered": "100.00",
+                                "using_index": true,
+                                "cost_info": {
+                                    "read_cost": "24580.50",
+                                    "eval_cost": "9832.20",
+                                    "prefix_cost": "44379.47",
+                                    "data_read_per_join": "6M"
+                                },
+                                "used_columns": [
+                                    "id"
+                                ]
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "l",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                    "ledger_journal_position_unique",
+                                    "ledger_account_journal_index",
+                                    "ledger_journal_fk",
+                                    "ledger_account_fk"
+                                ],
+                                "key": "ledger_account_journal_index",
+                                "used_key_parts": [
+                                    "account_id",
+                                    "journal_entry_id"
+                                ],
+                                "key_length": "16",
+                                "ref": [
+                                    "finance_ledger_performance.journal_entries.financial_account_id",
+                                    "finance_ledger_performance.journal_entries.id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 101891,
+                                "filtered": "100.00",
+                                "using_index": true,
+                                "cost_info": {
+                                    "read_cost": "24583.11",
+                                    "eval_cost": "10189.18",
+                                    "prefix_cost": "79151.75",
+                                    "data_read_per_join": "6M"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "journal_entry_id",
+                                    "account_id"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "sql": "select `journal_entries`.*, `a`.`external_number` as `account_number`, `l`.`amount_minor` from `journal_entries` inner join `accounts` as `a` on `a`.`id` = `journal_entries`.`financial_account_id` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `journal_entries`.`id` and `l`.`account_id` = `journal_entries`.`financial_account_id` where `journal_entries`.`owner_user_id` = ? and `journal_entries`.`id` in (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) order by `posting_date` desc, `journal_entries`.`id` desc",
+        "bindings": [
+            "1",
+            "10",
+            "9",
+            "8",
+            "7",
+            "6",
+            "5",
+            "4",
+            "3",
+            "2",
+            "1"
+        ],
+        "observed_ms": 5.41,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "19.38"
+                },
+                "ordering_operation": {
+                    "using_filesort": true,
+                    "cost_info": {
+                        "sort_cost": "5.18"
+                    },
+                    "nested_loop": [
+                        {
+                            "table": {
+                                "table_name": "journal_entries",
+                                "access_type": "range",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "journal_owner_hash_unique",
+                                    "journal_id_owner_currency_unique",
+                                    "journal_account_date_id_index",
+                                    "journal_financial_account_fk",
+                                    "journal_owner_read_index"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "rows_examined_per_scan": 10,
+                                "rows_produced_per_join": 4,
+                                "filtered": "50.00",
+                                "cost_info": {
+                                    "read_cost": "10.14",
+                                    "eval_cost": "0.50",
+                                    "prefix_cost": "10.64",
+                                    "data_read_per_join": "759"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "owner_user_id",
+                                    "financial_account_id",
+                                    "uploaded_by_user_id",
+                                    "posting_date",
+                                    "description",
+                                    "original_description",
+                                    "movement_type",
+                                    "currency",
+                                    "source_row_hash",
+                                    "canonical_record",
+                                    "created_at"
+                                ],
+                                "attached_condition": "((`finance_ledger_performance`.`journal_entries`.`owner_user_id` = '1') and (`finance_ledger_performance`.`journal_entries`.`id` in ('10','9','8','7','6','5','4','3','2','1')))"
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "a",
+                                "access_type": "eq_ref",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "accounts_id_owner_currency_unique"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "finance_ledger_performance.journal_entries.financial_account_id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 4,
+                                "filtered": "100.00",
+                                "cost_info": {
+                                    "read_cost": "1.25",
+                                    "eval_cost": "0.50",
+                                    "prefix_cost": "12.39",
+                                    "data_read_per_join": "359"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "external_number"
+                                ]
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "l",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                    "ledger_journal_position_unique",
+                                    "ledger_account_journal_index",
+                                    "ledger_journal_fk",
+                                    "ledger_account_fk"
+                                ],
+                                "key": "ledger_account_journal_index",
+                                "used_key_parts": [
+                                    "account_id",
+                                    "journal_entry_id"
+                                ],
+                                "key_length": "16",
+                                "ref": [
+                                    "finance_ledger_performance.journal_entries.financial_account_id",
+                                    "finance_ledger_performance.journal_entries.id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 5,
+                                "filtered": "100.00",
+                                "cost_info": {
+                                    "read_cost": "1.30",
+                                    "eval_cost": "0.52",
+                                    "prefix_cost": "14.20",
+                                    "data_read_per_join": "331"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "journal_entry_id",
+                                    "account_id",
+                                    "amount_minor"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "sql": "select `id` from `accounts` where `owner_user_id` = ? and `kind` = ? and `external_number` = ? limit 1",
+        "bindings": [
+            "1",
+            "asset",
+            "682"
+        ],
+        "observed_ms": 1.26,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "1.00"
+                },
+                "table": {
+                    "table_name": "accounts",
+                    "access_type": "const",
+                    "possible_keys": [
+                        "accounts_external_number_unique",
+                        "accounts_owner_technical_unique",
+                        "accounts_owner_kind_id_index"
+                    ],
+                    "key": "accounts_external_number_unique",
+                    "used_key_parts": [
+                        "external_number"
+                    ],
+                    "key_length": "9",
+                    "ref": [
+                        "const"
+                    ],
+                    "rows_examined_per_scan": 1,
+                    "rows_produced_per_join": 1,
+                    "filtered": "100.00",
+                    "cost_info": {
+                        "read_cost": "0.00",
+                        "eval_cost": "0.10",
+                        "prefix_cost": "0.00",
+                        "data_read_per_join": "72"
+                    },
+                    "used_columns": [
+                        "id",
+                        "owner_user_id",
+                        "external_number",
+                        "kind"
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "sql": "select count(*) as `aggregate` from `journal_entries` inner join `accounts` as `a` on `a`.`id` = `journal_entries`.`financial_account_id` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `journal_entries`.`id` and `l`.`account_id` = `journal_entries`.`financial_account_id` where `journal_entries`.`owner_user_id` = ? and `financial_account_id` = ?",
+        "bindings": [
+            "1",
+            583
+        ],
+        "observed_ms": 1.62,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "114.78"
+                },
+                "nested_loop": [
+                    {
+                        "table": {
+                            "table_name": "a",
+                            "access_type": "const",
+                            "possible_keys": [
+                                "PRIMARY",
+                                "accounts_id_owner_currency_unique"
+                            ],
+                            "key": "PRIMARY",
+                            "used_key_parts": [
+                                "id"
+                            ],
+                            "key_length": "8",
+                            "ref": [
+                                "const"
+                            ],
+                            "rows_examined_per_scan": 1,
+                            "rows_produced_per_join": 1,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "0.00",
+                                "eval_cost": "0.10",
+                                "prefix_cost": "0.00",
+                                "data_read_per_join": "72"
+                            },
+                            "used_columns": [
+                                "id"
+                            ]
+                        }
+                    },
+                    {
+                        "table": {
+                            "table_name": "journal_entries",
+                            "access_type": "ref",
+                            "possible_keys": [
+                                "PRIMARY",
+                                "journal_owner_hash_unique",
+                                "journal_id_owner_currency_unique",
+                                "journal_account_date_id_index",
+                                "journal_financial_account_fk",
+                                "journal_owner_read_index"
+                            ],
+                            "key": "journal_financial_account_fk",
+                            "used_key_parts": [
+                                "financial_account_id",
+                                "owner_user_id"
+                            ],
+                            "key_length": "16",
+                            "ref": [
+                                "const",
+                                "const"
+                            ],
+                            "rows_examined_per_scan": 252,
+                            "rows_produced_per_join": 252,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "0.46",
+                                "eval_cost": "25.20",
+                                "prefix_cost": "25.66",
+                                "data_read_per_join": "37K"
+                            },
+                            "used_columns": [
+                                "id",
+                                "owner_user_id",
+                                "financial_account_id"
+                            ]
+                        }
+                    },
+                    {
+                        "table": {
+                            "table_name": "l",
+                            "access_type": "ref",
+                            "possible_keys": [
+                                "ledger_journal_position_unique",
+                                "ledger_account_journal_index",
+                                "ledger_journal_fk",
+                                "ledger_account_fk"
+                            ],
+                            "key": "ledger_account_journal_index",
+                            "used_key_parts": [
+                                "account_id",
+                                "journal_entry_id"
+                            ],
+                            "key_length": "16",
+                            "ref": [
+                                "const",
+                                "finance_ledger_performance.journal_entries.id"
+                            ],
+                            "rows_examined_per_scan": 1,
+                            "rows_produced_per_join": 261,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "63.01",
+                                "eval_cost": "26.11",
+                                "prefix_cost": "114.78",
+                                "data_read_per_join": "16K"
+                            },
+                            "used_columns": [
+                                "journal_entry_id",
+                                "account_id"
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    {
+        "sql": "select `journal_entries`.`id` from `journal_entries` inner join `accounts` as `a` on `a`.`id` = `journal_entries`.`financial_account_id` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `journal_entries`.`id` and `l`.`account_id` = `journal_entries`.`financial_account_id` where `journal_entries`.`owner_user_id` = ? and `financial_account_id` = ? order by `posting_date` desc, `journal_entries`.`id` desc limit 10 offset 0",
+        "bindings": [
+            "1",
+            583
+        ],
+        "observed_ms": 12.63,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "279.92"
+                },
+                "ordering_operation": {
+                    "using_temporary_table": true,
+                    "using_filesort": true,
+                    "cost_info": {
+                        "sort_cost": "12.60"
+                    },
+                    "nested_loop": [
+                        {
+                            "table": {
+                                "table_name": "a",
+                                "access_type": "const",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "accounts_id_owner_currency_unique"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "const"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 1,
+                                "filtered": "100.00",
+                                "using_index": true,
+                                "cost_info": {
+                                    "read_cost": "0.00",
+                                    "eval_cost": "0.10",
+                                    "prefix_cost": "0.00",
+                                    "data_read_per_join": "72"
+                                },
+                                "used_columns": [
+                                    "id"
+                                ]
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "l",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                    "ledger_journal_position_unique",
+                                    "ledger_account_journal_index",
+                                    "ledger_journal_fk",
+                                    "ledger_account_fk"
+                                ],
+                                "key": "ledger_account_journal_index",
+                                "used_key_parts": [
+                                    "account_id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "const"
+                                ],
+                                "rows_examined_per_scan": 252,
+                                "rows_produced_per_join": 252,
+                                "filtered": "100.00",
+                                "using_index": true,
+                                "cost_info": {
+                                    "read_cost": "0.43",
+                                    "eval_cost": "25.20",
+                                    "prefix_cost": "25.63",
+                                    "data_read_per_join": "15K"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "journal_entry_id",
+                                    "account_id"
+                                ]
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "journal_entries",
+                                "access_type": "eq_ref",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "journal_owner_hash_unique",
+                                    "journal_id_owner_currency_unique",
+                                    "journal_account_date_id_index",
+                                    "journal_financial_account_fk",
+                                    "journal_owner_read_index"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "finance_ledger_performance.l.journal_entry_id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 12,
+                                "filtered": "5.00",
+                                "cost_info": {
+                                    "read_cost": "216.49",
+                                    "eval_cost": "1.26",
+                                    "prefix_cost": "267.32",
+                                    "data_read_per_join": "1K"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "owner_user_id",
+                                    "financial_account_id",
+                                    "posting_date"
+                                ],
+                                "attached_condition": "((`finance_ledger_performance`.`journal_entries`.`financial_account_id` = 583) and (`finance_ledger_performance`.`journal_entries`.`owner_user_id` = '1'))"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "sql": "select `journal_entries`.*, `a`.`external_number` as `account_number`, `l`.`amount_minor` from `journal_entries` inner join `accounts` as `a` on `a`.`id` = `journal_entries`.`financial_account_id` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `journal_entries`.`id` and `l`.`account_id` = `journal_entries`.`financial_account_id` where `journal_entries`.`owner_user_id` = ? and `financial_account_id` = ? and `journal_entries`.`id` in (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) order by `posting_date` desc, `journal_entries`.`id` desc",
+        "bindings": [
+            "1",
+            583,
+            "226484",
+            "225584",
+            "224983",
+            "224083",
+            "223183",
+            "222283",
+            "221383",
+            "220483",
+            "219583",
+            "218183"
+        ],
+        "observed_ms": 2.27,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "10.70"
+                },
+                "ordering_operation": {
+                    "using_filesort": true,
+                    "cost_info": {
+                        "sort_cost": "0.05"
+                    },
+                    "nested_loop": [
+                        {
+                            "table": {
+                                "table_name": "a",
+                                "access_type": "const",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "accounts_id_owner_currency_unique"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "ref": [
+                                    "const"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 1,
+                                "filtered": "100.00",
+                                "cost_info": {
+                                    "read_cost": "0.00",
+                                    "eval_cost": "0.10",
+                                    "prefix_cost": "0.00",
+                                    "data_read_per_join": "72"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "external_number"
+                                ]
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "journal_entries",
+                                "access_type": "range",
+                                "possible_keys": [
+                                    "PRIMARY",
+                                    "journal_owner_hash_unique",
+                                    "journal_id_owner_currency_unique",
+                                    "journal_account_date_id_index",
+                                    "journal_financial_account_fk",
+                                    "journal_owner_read_index"
+                                ],
+                                "key": "PRIMARY",
+                                "used_key_parts": [
+                                    "id"
+                                ],
+                                "key_length": "8",
+                                "rows_examined_per_scan": 10,
+                                "rows_produced_per_join": 0,
+                                "filtered": "0.50",
+                                "cost_info": {
+                                    "read_cost": "10.63",
+                                    "eval_cost": "0.00",
+                                    "prefix_cost": "10.64",
+                                    "data_read_per_join": "7"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "owner_user_id",
+                                    "financial_account_id",
+                                    "uploaded_by_user_id",
+                                    "posting_date",
+                                    "description",
+                                    "original_description",
+                                    "movement_type",
+                                    "currency",
+                                    "source_row_hash",
+                                    "canonical_record",
+                                    "created_at"
+                                ],
+                                "attached_condition": "((`finance_ledger_performance`.`journal_entries`.`financial_account_id` = 583) and (`finance_ledger_performance`.`journal_entries`.`owner_user_id` = '1') and (`finance_ledger_performance`.`journal_entries`.`id` in ('226484','225584','224983','224083','223183','222283','221383','220483','219583','218183')))"
+                            }
+                        },
+                        {
+                            "table": {
+                                "table_name": "l",
+                                "access_type": "ref",
+                                "possible_keys": [
+                                    "ledger_journal_position_unique",
+                                    "ledger_account_journal_index",
+                                    "ledger_journal_fk",
+                                    "ledger_account_fk"
+                                ],
+                                "key": "ledger_account_journal_index",
+                                "used_key_parts": [
+                                    "account_id",
+                                    "journal_entry_id"
+                                ],
+                                "key_length": "16",
+                                "ref": [
+                                    "const",
+                                    "finance_ledger_performance.journal_entries.id"
+                                ],
+                                "rows_examined_per_scan": 1,
+                                "rows_produced_per_join": 0,
+                                "filtered": "100.00",
+                                "cost_info": {
+                                    "read_cost": "0.01",
+                                    "eval_cost": "0.01",
+                                    "prefix_cost": "10.65",
+                                    "data_read_per_join": "3"
+                                },
+                                "used_columns": [
+                                    "id",
+                                    "journal_entry_id",
+                                    "account_id",
+                                    "amount_minor"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "sql": "select `revision` from `financial_states` where `owner_user_id` = ? limit 1",
+        "bindings": [
+            "1"
+        ],
+        "observed_ms": 0.99,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "1.00"
+                },
+                "table": {
+                    "table_name": "financial_states",
+                    "access_type": "const",
+                    "possible_keys": [
+                        "PRIMARY"
+                    ],
+                    "key": "PRIMARY",
+                    "used_key_parts": [
+                        "owner_user_id"
+                    ],
+                    "key_length": "8",
+                    "ref": [
+                        "const"
+                    ],
+                    "rows_examined_per_scan": 1,
+                    "rows_produced_per_join": 1,
+                    "filtered": "100.00",
+                    "cost_info": {
+                        "read_cost": "0.00",
+                        "eval_cost": "0.10",
+                        "prefix_cost": "0.00",
+                        "data_read_per_join": "24"
+                    },
+                    "used_columns": [
+                        "owner_user_id",
+                        "revision"
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "sql": "select COALESCE(SUM(CASE WHEN j.movement_type = 'income' THEN l.amount_minor ELSE 0 END), 0) AS income, COALESCE(SUM(CASE WHEN j.movement_type = 'expense' THEN l.amount_minor ELSE 0 END), 0) AS expense, COUNT(*) AS operations from `journal_entries` as `j` inner join `ledger_entries` as `l` on `l`.`journal_entry_id` = `j`.`id` and `l`.`account_id` = `j`.`financial_account_id` where `j`.`owner_user_id` = ? limit 1",
+        "bindings": [
+            "1"
+        ],
+        "observed_ms": 769.22,
+        "plan": {
+            "query_block": {
+                "select_id": 1,
+                "cost_info": {
+                    "query_cost": "45628.88"
+                },
+                "nested_loop": [
+                    {
+                        "table": {
+                            "table_name": "j",
+                            "access_type": "ref",
+                            "possible_keys": [
+                                "PRIMARY",
+                                "journal_owner_hash_unique",
+                                "journal_id_owner_currency_unique",
+                                "journal_account_date_id_index",
+                                "journal_financial_account_fk",
+                                "journal_owner_read_index"
+                            ],
+                            "key": "journal_owner_read_index",
+                            "used_key_parts": [
+                                "owner_user_id"
+                            ],
+                            "key_length": "8",
+                            "ref": [
+                                "const"
+                            ],
+                            "rows_examined_per_scan": 98322,
+                            "rows_produced_per_join": 98322,
+                            "filtered": "100.00",
+                            "using_index": true,
+                            "cost_info": {
+                                "read_cost": "134.57",
+                                "eval_cost": "9832.20",
+                                "prefix_cost": "9966.77",
+                                "data_read_per_join": "14M"
+                            },
+                            "used_columns": [
+                                "id",
+                                "owner_user_id",
+                                "financial_account_id",
+                                "movement_type"
+                            ]
+                        }
+                    },
+                    {
+                        "table": {
+                            "table_name": "l",
+                            "access_type": "ref",
+                            "possible_keys": [
+                                "ledger_journal_position_unique",
+                                "ledger_account_journal_index",
+                                "ledger_journal_fk",
+                                "ledger_account_fk"
+                            ],
+                            "key": "ledger_account_journal_index",
+                            "used_key_parts": [
+                                "account_id",
+                                "journal_entry_id"
+                            ],
+                            "key_length": "16",
+                            "ref": [
+                                "finance_ledger_performance.j.financial_account_id",
+                                "finance_ledger_performance.j.id"
+                            ],
+                            "rows_examined_per_scan": 1,
+                            "rows_produced_per_join": 101891,
+                            "filtered": "100.00",
+                            "cost_info": {
+                                "read_cost": "25472.94",
+                                "eval_cost": "10189.18",
+                                "prefix_cost": "45628.89",
+                                "data_read_per_join": "6M"
+                            },
+                            "used_columns": [
+                                "journal_entry_id",
+                                "account_id",
+                                "amount_minor"
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    }
+]

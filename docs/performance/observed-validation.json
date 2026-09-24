@@ -1,0 +1,51 @@
+{
+  "date_utc": "2026-09-24",
+  "backend": {
+    "core": {
+      "tests": 188,
+      "assertions": 1812
+    },
+    "feature": {
+      "tests": 169,
+      "assertions": 462
+    },
+    "integration": {
+      "tests": 204,
+      "assertions": 1095
+    },
+    "total_tests": 561,
+    "total_assertions": 3369,
+    "validated_after_read_optimization": true
+  },
+  "checks": {
+    "pint": "passed",
+    "phpstan_larastan_level_6": "passed",
+    "composer_validate_strict": "passed",
+    "bash_syntax": "passed",
+    "performance_compose_configuration": "passed"
+  },
+  "frontend": {
+    "code_changed": false,
+    "previous_stage_component_tests": 44,
+    "browser_e2e": "pending on Ubuntu/CI: no local Docker daemon, Cypress binary download unusable"
+  },
+  "runtime": {
+    "php": "8.4.1",
+    "mysql": "8.4.11",
+    "redis": "8.2.1",
+    "docker_containers_executed_here": false
+  },
+  "timezone_regression": {
+    "before": "failed by 10800 seconds",
+    "after": "passed with PDO sessions initialized in -03:00 and configured by Laravel in +00:00"
+  },
+  "performance": {
+    "status": "passed",
+    "started_at": "2026-09-24T18:07:55+00:00",
+    "finished_at": "2026-09-24T18:31:23+00:00",
+    "report": "observed-report.json",
+    "synthetic_bytes": 100000000,
+    "synthetic_records": 200000,
+    "job_exceptions": 0
+  }
+}

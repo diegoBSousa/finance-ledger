@@ -21,10 +21,27 @@ final class PreparedPostingValidator
     /** @param list<AccountData> $accounts */
     public function validate(PostJournalData $entry, array $accounts): void
     {
+        $this->validateBatch([$entry], $accounts);
+    }
+
+    /**
+     * @param  list<PostJournalData>  $entries
+     * @param  list<AccountData>  $accounts
+     */
+    public function validateBatch(array $entries, array $accounts): void
+    {
         $byId = [];
         foreach ($accounts as $data) {
             $byId[$data->id] = Account::fromData($data);
         }
+        foreach ($entries as $entry) {
+            $this->validateEntry($entry, $byId);
+        }
+    }
+
+    /** @param array<int|string, Account> $byId */
+    private function validateEntry(PostJournalData $entry, array $byId): void
+    {
         $financial = $byId[$entry->financialAccountId] ?? throw new DomainViolation('account_not_found', 'The financial account does not exist.');
         $type = MovementType::tryFrom($entry->movementType) ?? throw new DomainViolation('invalid_movement_type', 'Unknown movement type.');
         $counterpartId = $entry->journal->postings[$type === MovementType::Income ? 1 : 0]->accountId;

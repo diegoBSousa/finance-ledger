@@ -1,0 +1,94 @@
+# Started only by scripts/test-performance.sh. Separate project, database and volumes.
+services:
+  mysql:
+    image: mysql:8.4@sha256:0744ee5ef89ce6ccfa13de3e579fe6b9e27f93dd70da9c06d2c908b1b193fb8d
+    command: ["--log-bin-trust-function-creators=1", "--innodb-buffer-pool-size=256M", "--innodb-redo-log-capacity=128M"]
+    environment:
+      MYSQL_DATABASE: finance_ledger_performance
+      MYSQL_USER: ledger_performance
+      MYSQL_PASSWORD: disposable-performance-password
+      MYSQL_ROOT_PASSWORD: disposable-performance-root-password
+    volumes: ["performance-db:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql --host=127.0.0.1 --user=$$MYSQL_USER --database=$$MYSQL_DATABASE --silent --execute='SELECT 1'"]
+      start_period: 30s
+      interval: 3s
+      timeout: 3s
+      retries: 50
+  redis:
+    image: redis:8.2-alpine@sha256:5517128c78ca95f28f7dc6a90e2f808f35f01a4a01c2c20e514571b4d9706275
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    tmpfs: ["/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  runner:
+    image: finance-ledger-php:development
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    working_dir: /var/www/html
+    environment:
+      APP_ENV: testing
+      APP_DEBUG: "false"
+      APP_KEY: "base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      APP_CONFIG_CACHE: /tmp/finance-ledger-performance-config.php
+      APP_ROUTES_CACHE: /tmp/finance-ledger-performance-routes.php
+      APP_URL: http://127.0.0.1
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_SOCKET: ""
+      DB_URL: ""
+      DB_DATABASE: finance_ledger_performance
+      DB_USERNAME: ledger_performance
+      DB_PASSWORD: disposable-performance-password
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_URL: ""
+      REDIS_DB: 0
+      REDIS_CACHE_DB: 1
+      REDIS_PREFIX: "finance_ledger_performance:"
+      CACHE_STORE: redis
+      CACHE_PREFIX: "finance_ledger_performance_cache:"
+      QUEUE_CONNECTION: redis
+      REDIS_QUEUE_RETRY_AFTER: 90
+      SESSION_DRIVER: array
+      HASH_DRIVER: argon2id
+      JWT_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      JWT_ISSUER: finance-ledger-api
+      JWT_AUDIENCE: finance-ledger-spa
+      DEMO_USER_EMAIL: performance@example.test
+      DEMO_USER_PASSWORD: disposable-performance-password
+      IMPORT_UPLOAD_ROOT: /performance-uploads
+      LOG_CHANNEL: stderr
+      LEDGER_PERFORMANCE_RESET: "1"
+      LEDGER_PERFORMANCE_OUTPUT: /artifacts
+      LEDGER_PERFORMANCE_UID: ${LEDGER_PERFORMANCE_UID:-1000}
+      LEDGER_PERFORMANCE_GID: ${LEDGER_PERFORMANCE_GID:-1000}
+      LEDGER_PERFORMANCE_MODE: ${LEDGER_PERFORMANCE_MODE:-full}
+    volumes:
+      - ./backend:/var/www/html:ro
+      - performance-storage:/var/www/html/storage
+      - performance-uploads:/performance-uploads
+      - ${LEDGER_PERFORMANCE_ARTIFACTS:?Use scripts/test-performance.sh}:/artifacts
+    tmpfs: ["/var/www/html/bootstrap/cache"]
+    init: true
+    command:
+      - bash
+      - -c
+      - |
+        args=()
+        if [[ "$$LEDGER_PERFORMANCE_MODE" == quick ]]; then args+=(--quick); fi
+        php tests/Performance/run.php "$${args[@]}"
+        result=$$?
+        chown -R "$$LEDGER_PERFORMANCE_UID:$$LEDGER_PERFORMANCE_GID" /artifacts
+        exit "$$result"
+
+volumes:
+  performance-db:
+  performance-storage:
+  performance-uploads:
