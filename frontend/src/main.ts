@@ -1,5 +1,11 @@
-import { createApp } from 'vue'
-import App from './App.vue'
-import './style.css'
+import { createApp } from "vue";
+import App from "./App.vue";
+import { createServices, servicesKey } from "./services";
+import { createLedgerRouter } from "./router";
+import "./style.css";
 
-createApp(App).mount('#app')
+const services = createServices();
+createApp(App)
+  .provide(servicesKey, services)
+  .use(createLedgerRouter(services.auth))
+  .mount("#app");

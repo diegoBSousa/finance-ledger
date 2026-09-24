@@ -204,6 +204,7 @@ services:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL}
       FRONTEND_ORIGIN: http://localhost:${FRONTEND_PORT:-5173}
       npm_config_cache: /tmp/npm-cache
+      CYPRESS_INSTALL_BINARY: "0"
     volumes:
       - ./frontend:/app
     ports:

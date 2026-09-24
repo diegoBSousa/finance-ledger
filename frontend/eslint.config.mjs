@@ -1,16 +1,16 @@
-import js from '@eslint/js'
-import vue from 'eslint-plugin-vue'
-import globals from 'globals'
-import ts from 'typescript-eslint'
+import js from "@eslint/js";
+import vue from "eslint-plugin-vue";
+import globals from "globals";
+import ts from "typescript-eslint";
 
 export default ts.config(
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**'] },
+  { ignores: ["dist/**", "node_modules/**", "coverage/**", "artifacts/**"] },
   js.configs.recommended,
   ...ts.configs.recommended,
-  ...vue.configs['flat/essential'],
+  ...vue.configs["flat/essential"],
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
   {
-    files: ['**/*.vue'],
+    files: ["**/*.vue"],
     languageOptions: { parserOptions: { parser: ts.parser } },
   },
-)
+);

@@ -11,4 +11,6 @@ bash scripts/test-mysql.sh
 docker compose exec -T frontend npm run lint
 docker compose exec -T frontend npm run test
 docker compose exec -T frontend npm run build
+docker compose exec -T frontend npm run typecheck:e2e
 bash scripts/smoke.sh
+bash scripts/test-e2e.sh

@@ -111,6 +111,12 @@ O protocolo admite entregas repetidas. A idempotência da preparação, os locks
 
 Filtros, contrato HTTP, consistência entre páginas e protocolo completo estão em [step-09.md](step-09.md).
 
+## SPA Vue
+
+A aplicação usa Vue Router com hash e telas carregadas por demanda. `ApiClient` centraliza o contrato HTTP; `createAuth()` mantém o JWT somente em memória. Respostas de uma sessão anterior são descartadas, requisições de telas substituídas são abortadas e um 401 limpa a sessão. Dinheiro e contadores são strings decimais formatadas com `BigInt`.
+
+O monitor acompanha importações pendentes conhecidas, pausa em abas ocultas e atualiza as consultas financeiras visíveis após novos commits. O frontend sempre lê os saldos da API. Componentes de paginação impõem dez itens, e formulários preservam os filtros na URL. A arquitetura e os limites do acompanhamento estão em [step-10.md](step-10.md).
+
 ## Processos
 
 App, worker, `outbox-relay` e `balance-projector` compartilham a imagem PHP. O volume `uploads` fica fora da raiz pública do Nginx. O worker atende `imports,default`; o relay depende somente do MySQL para iniciar e retenta quando Redis está indisponível.
