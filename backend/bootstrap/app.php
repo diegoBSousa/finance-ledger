@@ -8,6 +8,7 @@ use App\Application\Imports\ImportNotFound;
 use App\Application\Imports\ImportUnavailable;
 use App\Application\Imports\InvalidImportFile;
 use App\Application\Imports\UploadTooLarge;
+use App\Application\Shared\ReadUnavailable;
 use App\Http\Middleware\AuthenticateJwt;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -35,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (InvalidImportFile $e) => response()->json(['message' => $e->getMessage(), 'code' => $e->reason], 422));
         $exceptions->render(fn (ImportNotFound $e) => response()->json(['message' => $e->getMessage(), 'code' => 'import_not_found'], 404));
         $exceptions->render(fn (ImportUnavailable $e) => response()->json(['message' => $e->getMessage(), 'code' => 'import_unavailable'], 503));
+        $exceptions->render(fn (ReadUnavailable $e) => response()->json(['message' => $e->getMessage(), 'code' => 'financial_read_unavailable'], 503, ['Retry-After' => '1']));
         $tooLarge = fn () => response()->json(['message' => 'The CSV must not exceed 100000000 bytes.', 'code' => 'upload_too_large'], 413);
         $exceptions->render(fn (UploadTooLarge $e) => $tooLarge());
         $exceptions->render(fn (PostTooLargeException $e) => $tooLarge());
