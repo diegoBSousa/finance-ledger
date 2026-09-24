@@ -9,3 +9,5 @@
 /frontend/coverage/
 *.log
 .DS_Store
+
+/frontend/artifacts/

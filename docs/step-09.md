@@ -100,7 +100,7 @@ O teste do CSV fornecido agora valida também o dashboard e o extrato de #682: r
 
 Há testes com MySQL e Redis reais para snapshot durante commit concorrente, precisão e overflow, indisponibilidade de cache/banco, isolamento por titular, páginas e filtros, perda de mensagem Redis e falha de confirmação SQL. O mesmo contrato do cache é executado contra o double em memória e o adapter Redis. A suíte isolada continua bloqueando Laravel nas camadas de domínio/aplicação.
 
-Os resultados consolidados estão no [README](../README.md#testes-e-situação-de-validação). A execução dos containers ainda precisa ser confirmada no Ubuntu/CI: o ambiente de implementação não tem daemon Docker. As telas Vue não foram alteradas. Benchmark financeiro de 100 MB, concorrência sustentada e ajustes com EXPLAIN permanecem na etapa de desempenho.
+Os resultados consolidados estão no [README](../README.md#testes-e-situação-de-validação). O log enviado pelo usuário após esta entrega confirmou a execução dos containers e de todas as suítes no Ubuntu; o ambiente de implementação não tem daemon Docker. As telas Vue não foram alteradas. Benchmark financeiro de 100 MB, concorrência sustentada e ajustes com EXPLAIN permanecem na etapa de desempenho.
 
 ## Próxima etapa
 
